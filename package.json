@@ -1,0 +1,57 @@
+{
+  "name": "bintaro-works-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bintaro Works OS — business operating system multi-tenant untuk workspace & business services",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build",
+    "typecheck": "tsc --noEmit",
+    "setup": "prisma generate && prisma migrate dev --name init && prisma db seed",
+    "setup:local": "bash scripts/setup-local.sh",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "prisma db seed",
+    "db:fresh": "prisma migrate reset --force",
+    "db:studio": "prisma studio",
+    "test": "tsx scripts/test-core.ts && tsx scripts/test-core.ts --prisma",
+    "smoke": "node scripts/smoke-test.mjs",
+    "demo:build": "node scripts/build-demo.mjs",
+    "test:e2e": "node scripts/build-demo.mjs && node scripts/e2e-demo.mjs"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "^7.2.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "next": "^16.2.0",
+    "pg": "^8.13.1",
+    "prisma": "^7.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-icons": "^5.4.0",
+    "server-only": "^0.0.1",
+    "tsx": "^4.19.2",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.25.0",
+    "playwright": "^1.56.0",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.9.2"
+  }
+}

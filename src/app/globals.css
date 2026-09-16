@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Token tema — Bintaro Works OS
+   "Beton & pinus": abu beton bernada hijau, aksen hijau pinus,
+   sentuhan kuningan untuk sorotan. Nilai = kanal RGB.
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --ground: 243 245 241;
+  --surface: 255 255 255;
+  --raised: 249 250 247;
+  --line: 223 228 222;
+  --ink: 20 30 26;
+  --muted: 88 101 95;
+  --faint: 140 151 146;
+  --accent: 24 94 74;
+  --accent-ink: 255 255 255;
+  --accent-soft: 224 239 232;
+  --brass: 176 120 32;
+  --side: 16 36 30;
+  --side-ink: 236 243 239;
+  --side-muted: 150 173 163;
+  --good: 22 128 60;
+  --good-soft: 222 242 228;
+  --warn: 166 104 0;
+  --warn-soft: 252 239 211;
+  --bad: 196 50 50;
+  --bad-soft: 252 229 227;
+  --info: 37 99 190;
+  --info-soft: 225 236 251;
+  --shadow: 16 36 30;
+
+  /* seri grafik (palet tervalidasi, mode terang) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+  --series-9: #8a8f8c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ground: 13 18 16;
+    --surface: 21 28 25;
+    --raised: 27 35 31;
+    --line: 43 54 49;
+    --ink: 231 238 234;
+    --muted: 160 173 167;
+    --faint: 112 126 119;
+    --accent: 84 190 152;
+    --accent-ink: 8 26 20;
+    --accent-soft: 25 55 45;
+    --brass: 222 172 88;
+    --side: 10 15 13;
+    --side-ink: 231 238 234;
+    --side-muted: 128 146 138;
+    --good: 88 196 120;
+    --good-soft: 24 52 34;
+    --warn: 232 170 60;
+    --warn-soft: 58 44 16;
+    --bad: 240 110 105;
+    --bad-soft: 64 28 28;
+    --info: 110 164 240;
+    --info-soft: 24 40 66;
+    --shadow: 0 0 0;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-8: #e66767;
+    --series-9: #7d837f;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ground: 13 18 16;
+  --surface: 21 28 25;
+  --raised: 27 35 31;
+  --line: 43 54 49;
+  --ink: 231 238 234;
+  --muted: 160 173 167;
+  --faint: 112 126 119;
+  --accent: 84 190 152;
+  --accent-ink: 8 26 20;
+  --accent-soft: 25 55 45;
+  --brass: 222 172 88;
+  --side: 10 15 13;
+  --side-ink: 231 238 234;
+  --side-muted: 128 146 138;
+  --good: 88 196 120;
+  --good-soft: 24 52 34;
+  --warn: 232 170 60;
+  --warn-soft: 58 44 16;
+  --bad: 240 110 105;
+  --bad-soft: 64 28 28;
+  --info: 110 164 240;
+  --info-soft: 24 40 66;
+  --shadow: 0 0 0;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --series-9: #7d837f;
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    @apply bg-ground text-ink font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.2);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply min-w-0 rounded-xl border border-line bg-surface;
+  }
+  .btn {
+    @apply inline-flex h-9 select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-accent text-accent-ink hover:bg-accent/90;
+  }
+  .btn-secondary {
+    @apply border border-line bg-surface text-ink hover:bg-raised;
+  }
+  .btn-ghost {
+    @apply text-muted hover:bg-ink/5 hover:text-ink;
+  }
+  .btn-danger {
+    @apply bg-bad text-white hover:bg-bad/90;
+  }
+  .btn-sm {
+    @apply h-8 px-2.5 text-xs;
+  }
+  .btn-icon {
+    @apply h-9 w-9 px-0;
+  }
+  .input {
+    @apply h-9 w-full rounded-lg border border-line bg-surface px-3 text-[13px] text-ink placeholder:text-faint transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60;
+  }
+  textarea.input {
+    @apply h-auto py-2;
+  }
+  .label {
+    @apply mb-1.5 block text-xs font-semibold text-muted;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-faint;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+  .tbl {
+    @apply w-full border-collapse text-left text-[13px];
+  }
+  .tbl th {
+    @apply whitespace-nowrap border-b border-line bg-raised px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-faint;
+  }
+  .tbl td {
+    @apply border-b border-line px-4 py-3 align-middle;
+  }
+  .tbl tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tbl tbody tr.row-link {
+    @apply cursor-pointer transition-colors hover:bg-raised;
+  }
+  .hatch {
+    background-image: repeating-linear-gradient(135deg, rgb(var(--faint) / 0.28) 0 2px, transparent 2px 7px);
+  }
+  .grid-paper {
+    background-color: rgb(var(--raised));
+    background-image: linear-gradient(rgb(var(--line) / 0.7) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--line) / 0.7) 1px, transparent 1px);
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .print-sheet {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}

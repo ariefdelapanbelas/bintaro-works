@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bwos
+      POSTGRES_PASSWORD: bwos
+      POSTGRES_DB: bwos
+    ports:
+      - "5432:5432"
+    volumes:
+      - bwos_pg:/var/lib/postgresql/data
+
+volumes:
+  bwos_pg:

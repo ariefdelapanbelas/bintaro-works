@@ -1,0 +1,79 @@
+# Verifikasi otomatis setiap push ke GitHub:
+# install → uji logika bisnis → migrasi PostgreSQL nyata → seed → next build → jalankan server → smoke test
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bwos
+          POSTGRES_PASSWORD: bwos
+          POSTGRES_DB: bwos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bwos -d bwos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://bwos:bwos@localhost:5432/bwos?schema=public
+      AUTH_SECRET: ci-only-secret-not-for-production-0123456789abcdef
+      COOKIE_SECURE: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+
+      - name: Pasang Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Pasang library
+        run: npm install
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Uji logika bisnis & API (MemoryRepo + PrismaRepo)
+        run: npm test
+
+      - name: Buat tabel di PostgreSQL
+        run: |
+          if ls prisma/migrations/*/migration.sql >/dev/null 2>&1; then
+            npx prisma migrate deploy
+          else
+            echo "Belum ada folder migrasi — memakai db push"
+            npx prisma db push
+          fi
+
+      - name: Isi data contoh
+        run: npx prisma db seed
+
+      - name: Build produksi (termasuk type check)
+        run: npm run build
+
+      - name: Jalankan server & smoke test
+        run: |
+          npm run start -- -p 3000 > server.log 2>&1 &
+          node scripts/smoke-test.mjs
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Log server (bila gagal)
+        if: failure()
+        run: cat server.log || true

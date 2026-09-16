@@ -1,0 +1,555 @@
+// =============================================================
+// Bintaro Works OS — skema database (PostgreSQL, Prisma ORM 7)
+// Prinsip: setiap tabel domain punya organizationId (isolasi tenant)
+// Uang disimpan sebagai Int dalam Rupiah penuh (tanpa desimal)
+// =============================================================
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Enum ----------
+
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+  FINANCE
+  CUSTOMER
+}
+
+enum SpaceType {
+  PRIVATE_OFFICE
+  COWORKING_DESK
+  MEETING_ROOM
+  PODCAST_STUDIO
+  LIVE_STUDIO
+  EVENT_SPACE
+  PARKING
+}
+
+enum SpaceStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
+}
+
+enum CustomerType {
+  COMPANY
+  INDIVIDUAL
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  SITE_VISIT
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum LeadSource {
+  WEBSITE
+  WALK_IN
+  WHATSAPP
+  INSTAGRAM
+  REFERRAL
+  OTHER
+}
+
+enum ActivityType {
+  NOTE
+  CALL
+  EMAIL
+  MEETING
+  WHATSAPP
+  STAGE_CHANGE
+}
+
+enum ProductCategory {
+  PRIVATE_OFFICE
+  VIRTUAL_OFFICE
+  COWORKING
+  MEETING_ROOM
+  STUDIO
+  PARKING
+  PRINTING
+  BUSINESS_SERVICE
+  ADDON
+}
+
+enum ProductUnit {
+  MONTH
+  HOUR
+  PIECE
+  PACKAGE
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+enum BillingCycle {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  UPFRONT
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum BookingSource {
+  ADMIN
+  PORTAL
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum PaymentMethod {
+  TRANSFER
+  QRIS
+  VIRTUAL_ACCOUNT
+  CASH
+  CARD
+}
+
+enum RequestStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum RequestPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// ---------- Tenant, user & akses ----------
+
+model Organization {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  email          String?
+  phone          String?
+  address        String?
+  npwp           String?
+  taxRate        Int      @default(11) // PPN dalam persen
+  invoicePrefix  String   @default("INV")
+  contractPrefix String   @default("KTR")
+  paymentTermDays Int     @default(14)
+  bankName       String?
+  bankAccountNo  String?
+  bankAccountName String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  memberships     Membership[]
+  locations       Location[]
+  floors          Floor[]
+  spaces          Space[]
+  customers       Customer[]
+  leads           Lead[]
+  leadActivities  LeadActivity[]
+  products        Product[]
+  contracts       Contract[]
+  bookings        Booking[]
+  invoices        Invoice[]
+  invoiceItems    InvoiceItem[]
+  payments        Payment[]
+  serviceRequests ServiceRequest[]
+  auditLogs       AuditLog[]
+  counters        Counter[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  phone        String?
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+model Membership {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role
+  customerId     String? // diisi bila role = CUSTOMER (akses portal)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Counter {
+  id             String @id @default(cuid())
+  organizationId String
+  key            String
+  value          Int    @default(0)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+}
+
+// ---------- Ruang ----------
+
+model Location {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  address        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  floors       Floor[]
+
+  @@index([organizationId])
+}
+
+model Floor {
+  id             String   @id @default(cuid())
+  organizationId String
+  locationId     String
+  name           String
+  level          Int      @default(1)
+  gridCols       Int      @default(12)
+  gridRows       Int      @default(8)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location     Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  spaces       Space[]
+
+  @@index([organizationId, locationId])
+}
+
+model Space {
+  id             String      @id @default(cuid())
+  organizationId String
+  floorId        String
+  code           String
+  name           String
+  type           SpaceType
+  status         SpaceStatus @default(AVAILABLE)
+  capacity       Int         @default(1)
+  areaSqm        Int?
+  monthlyPrice   Int         @default(0)
+  hourlyPrice    Int         @default(0)
+  isBookable     Boolean     @default(false)
+  amenities      String[]
+  posX           Int         @default(0)
+  posY           Int         @default(0)
+  width          Int         @default(2)
+  height         Int         @default(2)
+  description    String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  floor        Floor        @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  contracts    Contract[]
+  bookings     Booking[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, floorId])
+}
+
+// ---------- CRM & pelanggan ----------
+
+model Customer {
+  id             String         @id @default(cuid())
+  organizationId String
+  type           CustomerType   @default(COMPANY)
+  name           String
+  contactName    String?
+  email          String?
+  phone          String?
+  npwp           String?
+  address        String?
+  industry       String?
+  status         CustomerStatus @default(ACTIVE)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contracts       Contract[]
+  bookings        Booking[]
+  invoices        Invoice[]
+  leads           Lead[]
+  memberships     Membership[]
+  serviceRequests ServiceRequest[]
+
+  @@index([organizationId])
+}
+
+model Lead {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  company        String?
+  email          String?
+  phone          String?
+  source         LeadSource      @default(OTHER)
+  interest       ProductCategory @default(PRIVATE_OFFICE)
+  stage          LeadStage       @default(NEW)
+  expectedValue  Int             @default(0)
+  ownerId        String?
+  customerId     String?
+  nextFollowUpAt DateTime?
+  lostReason     String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  activities   LeadActivity[]
+
+  @@index([organizationId, stage])
+}
+
+model LeadActivity {
+  id             String       @id @default(cuid())
+  organizationId String
+  leadId         String
+  type           ActivityType
+  content        String
+  userId         String?
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, leadId])
+}
+
+// ---------- Katalog, kontrak, booking ----------
+
+model Product {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  category       ProductCategory
+  unit           ProductUnit     @default(MONTH)
+  price          Int
+  description    String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contracts    Contract[]
+  invoiceItems InvoiceItem[]
+
+  @@index([organizationId])
+}
+
+model Contract {
+  id             String          @id @default(cuid())
+  organizationId String
+  number         String
+  customerId     String
+  spaceId        String?
+  productId      String?
+  category       ProductCategory
+  title          String
+  startDate      DateTime
+  endDate        DateTime
+  monthlyFee     Int
+  deposit        Int             @default(0)
+  billingCycle   BillingCycle    @default(MONTHLY)
+  status         ContractStatus  @default(DRAFT)
+  autoRenew      Boolean         @default(false)
+  signedAt       DateTime?
+  terminatedAt   DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  space        Space?       @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  invoices     Invoice[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  organizationId String
+  spaceId        String
+  customerId     String?
+  guestName      String?
+  title          String
+  startAt        DateTime
+  endAt          DateTime
+  attendees      Int           @default(1)
+  status         BookingStatus @default(CONFIRMED)
+  source         BookingSource @default(ADMIN)
+  amount         Int           @default(0)
+  invoiceId      String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, spaceId, startAt])
+}
+
+// ---------- Tagihan & pembayaran ----------
+
+model Invoice {
+  id             String        @id @default(cuid())
+  organizationId String
+  number         String
+  customerId     String
+  contractId     String?
+  bookingId      String?
+  issueDate      DateTime
+  dueDate        DateTime
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  subtotal       Int           @default(0)
+  discount       Int           @default(0)
+  taxRate        Int           @default(11)
+  taxAmount      Int           @default(0)
+  total          Int           @default(0)
+  amountPaid     Int           @default(0)
+  status         InvoiceStatus @default(DRAFT)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  contract     Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  items        InvoiceItem[]
+  payments     Payment[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status])
+  @@index([organizationId, customerId])
+}
+
+model InvoiceItem {
+  id             String  @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  productId      String?
+  description    String
+  quantity       Int     @default(1)
+  unitPrice      Int
+  amount         Int
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, invoiceId])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  amount         Int
+  method         PaymentMethod @default(TRANSFER)
+  paidAt         DateTime
+  reference      String?
+  notes          String?
+  recordedById   String?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, paidAt])
+}
+
+// ---------- Portal & audit ----------
+
+model ServiceRequest {
+  id             String          @id @default(cuid())
+  organizationId String
+  customerId     String
+  category       String
+  subject        String
+  description    String
+  priority       RequestPriority @default(MEDIUM)
+  status         RequestStatus   @default(OPEN)
+  response       String?
+  createdById    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  userName       String?
+  action         String
+  entity         String
+  entityId       String?
+  summary        String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
