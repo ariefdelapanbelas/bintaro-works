@@ -7,8 +7,8 @@ import { useSession } from "@/client/session";
 import { Button, ErrorBox, Field, Input } from "@/ui/primitives";
 import { Logo, ThemeToggle } from "../shell/AppShell";
 
-// Set NEXT_PUBLIC_DEMO_MODE="false" di produksi untuk menyembunyikan akun contoh.
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
+// Kotak akun contoh hanya tampil bila NEXT_PUBLIC_DEMO_MODE="true" (lokal/demo). Produksi: kosongkan.
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 const DEMO = [
   { email: "owner@bintaroworks.id", role: "Owner" },

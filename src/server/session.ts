@@ -18,17 +18,34 @@ function fromB64url(s: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
-function secret(): string {
+let warned = false;
+
+/**
+ * Kunci penandatangan sesi.
+ * 1) AUTH_SECRET (disarankan, min. 32 karakter)
+ * 2) Bila kosong di produksi: diturunkan dari connection string database
+ *    (hanya pihak yang memegang kredensial DB yang bisa memalsukan sesi —
+ *    pihak itu toh sudah punya akses penuh ke data). Tetap disarankan mengisi AUTH_SECRET.
+ * 3) Development: kunci lokal tetap.
+ */
+async function secret(): Promise<string> {
   const s = process.env.AUTH_SECRET;
-  if (!s || s.length < 32) {
-    if (process.env.NODE_ENV === "production") throw new Error("AUTH_SECRET wajib diisi (min. 32 karakter)");
-    return "dev-only-insecure-secret-change-me-please-0123456789";
+  if (s && s.length >= 32) return s;
+  const dbUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL;
+  if (process.env.NODE_ENV === "production") {
+    if (!dbUrl) throw new Error("AUTH_SECRET wajib diisi (min. 32 karakter)");
+    if (!warned) {
+      console.warn("[bwos] AUTH_SECRET belum diisi — memakai kunci turunan dari DATABASE_URL. Isi AUTH_SECRET untuk keamanan terbaik.");
+      warned = true;
+    }
+    const digest = await crypto.subtle.digest("SHA-256", enc.encode(`bwos-session-v1:${dbUrl}`));
+    return b64url(new Uint8Array(digest));
   }
-  return s;
+  return "dev-only-insecure-secret-change-me-please-0123456789";
 }
 
 async function hmac(data: string): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret()), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const key = await crypto.subtle.importKey("raw", enc.encode(await secret()), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
 }
 
@@ -56,11 +73,13 @@ export async function verifySession(token: string | undefined | null): Promise<S
   }
 }
 
-export function cookieOptions() {
+/** `isHttps`: protokol permintaan; COOKIE_SECURE ("true"/"false") bila diisi akan menang. */
+export function cookieOptions(isHttps = false) {
+  const flag = process.env.COOKIE_SECURE;
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.COOKIE_SECURE === "true",
+    secure: flag === "true" ? true : flag === "false" ? false : isHttps,
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
   };

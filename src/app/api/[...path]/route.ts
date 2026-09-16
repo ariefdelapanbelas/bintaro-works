@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { handleApi, type Method } from "@/core/api/router";
-import { deps } from "@/server/db";
+import { getDeps } from "@/server/db";
 import { SESSION_COOKIE, cookieOptions, signSession, verifySession } from "@/server/session";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ async function handle(req: NextRequest, ctx: Ctx, method: Method) {
 
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   const result = await handleApi(
-    deps,
+    getDeps(),
     {
       method,
       path: "/" + path.map(encodeURIComponent).join("/"),
@@ -44,11 +44,12 @@ async function handle(req: NextRequest, ctx: Ctx, method: Method) {
   );
 
   const res = NextResponse.json(result.body, { status: result.status });
+  const isHttps = req.nextUrl.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
   res.headers.set("Cache-Control", "no-store");
   if (result.setSession) {
-    res.cookies.set(SESSION_COOKIE, await signSession(result.setSession), cookieOptions());
+    res.cookies.set(SESSION_COOKIE, await signSession(result.setSession), cookieOptions(isHttps));
   } else if (result.setSession === null) {
-    res.cookies.set(SESSION_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
+    res.cookies.set(SESSION_COOKIE, "", { ...cookieOptions(isHttps), maxAge: 0 });
   }
   return res;
 }

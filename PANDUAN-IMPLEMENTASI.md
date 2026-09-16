@@ -83,27 +83,23 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 - [ ] Buka tab **Actions** di GitHub → tunggu workflow **CI** berwarna hijau ✅
   (otomatis: install, uji, migrasi ke PostgreSQL, seed, build produksi, smoke test)
 
-**4b. Buat database online**
-- [ ] Daftar https://neon.tech (atau https://supabase.com) → buat project → region **Singapore**
-- [ ] Salin *connection string* (format `postgresql://...`)
+**4b. Deploy ke Vercel** **(konfigurasi otomatis dari `vercel.json`)**
+- [ ] Daftar https://vercel.com dengan akun GitHub → *Add New → Project* → pilih `bintaro-works-os` → **Deploy**
+  (build pertama boleh tanpa database — aplikasi sudah terbangun, tinggal disambungkan ke database)
 
-**4c. Deploy ke Vercel** **(konfigurasi otomatis dari `vercel.json`)**
-- [ ] Daftar https://vercel.com dengan akun GitHub → *Add New → Project* → pilih `bintaro-works-os`
-- [ ] Isi **Environment Variables** sebelum klik Deploy:
-
-  | Nama | Isi |
-  |---|---|
-  | `DATABASE_URL` | connection string dari 4b |
-  | `AUTH_SECRET` | hasil `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` (buat baru, jangan pakai milik laptop) |
-  | `COOKIE_SECURE` | `true` |
-  | `NEXT_PUBLIC_DEMO_MODE` | `false` |
-
-- [ ] Klik **Deploy**. Tabel database dibuat otomatis saat build (`prisma migrate deploy`)
-- [ ] Buka alamat `https://....vercel.app/signup` → daftarkan organisasi Bintaro Works
+**4c. Sambungkan database (tanpa copy-paste kredensial)**
+- [ ] Vercel → Project → tab **Storage** → *Create Database* → pilih **Neon** (Postgres) → region **Singapore** → *Connect* ke project ini
+  (Vercel otomatis mengisi `DATABASE_URL` & variabel terkait)
+- [ ] (Disarankan) Settings → Environment Variables → tambah `AUTH_SECRET` = hasil `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`
+- [ ] Tab **Deployments** → titik tiga pada deployment terakhir → **Redeploy**
+  Saat build, tabel database dibuat otomatis (`scripts/vercel-build.mjs`)
+- [ ] Buka `https://....vercel.app/signup` → daftarkan organisasi Bintaro Works
 - [ ] Verifikasi dari laptop:
   ```bash
   BASE_URL=https://ALAMAT.vercel.app SMOKE_WRITE=0 SMOKE_EMAIL=email-owner SMOKE_PASSWORD=sandi npm run smoke
   ```
+
+> Tidak perlu mengatur `COOKIE_SECURE` (otomatis mengikuti https) maupun `NEXT_PUBLIC_DEMO_MODE` (akun contoh tersembunyi secara default di produksi).
 
 **4d. Domain sendiri (opsional)**
 - [ ] Vercel → Project → Settings → Domains → tambah `app.bintaroworks.id`

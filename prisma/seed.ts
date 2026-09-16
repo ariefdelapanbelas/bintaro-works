@@ -8,7 +8,7 @@ import { scryptHasher } from "../src/server/password";
 import { PrismaRepo } from "../src/server/prisma-repo";
 
 async function main() {
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: (process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL)! }) });
   try {
     const existing = await prisma.organization.findUnique({ where: { slug: "bintaro-works" } });
     if (existing) {
