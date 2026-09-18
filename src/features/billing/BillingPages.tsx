@@ -9,6 +9,7 @@ import { Link, useNav, useSearchParam } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { ConfirmDialog, Modal, useToast } from "@/ui/overlay";
 import { Badge, Button, Card, cn, Empty, ErrorBox, Field, Input, MoneyInput, PageHeader, Select, Spinner, Stat, StatusBadge, Tabs, Textarea } from "@/ui/primitives";
+import { logoSrc } from "@/ui/Logo";
 
 type InvoiceRow = Invoice & { customerName: string; outstanding: number };
 export type InvoiceDetail = Invoice & {
@@ -444,13 +445,12 @@ export function InvoiceSheet({ inv }: { inv: InvoiceDetail }) {
     <article className="print-sheet card overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-6 border-b border-line p-6 sm:p-8">
         <div>
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 grid-cols-2 grid-rows-2 gap-[3px] rounded-lg bg-accent p-[8px]" aria-hidden>
-              <span className="rounded-[2px] bg-accent-ink" />
-              <span className="rounded-[2px] bg-accent-ink/40" />
-              <span className="rounded-[2px] bg-accent-ink/40" />
-              <span className="rounded-[2px] bg-accent-ink" />
-            </span>
+          <div className="flex items-center gap-3">
+            <img
+              src={logoSrc}
+              alt={o.name}
+              className="h-10 w-10 rounded-lg object-cover shadow-sm ring-1 ring-black/10 shrink-0"
+            />
             <span className="font-display text-lg font-bold">{o.name}</span>
           </div>
           <p className="mt-2 max-w-xs text-xs leading-relaxed text-muted">

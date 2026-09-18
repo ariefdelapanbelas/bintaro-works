@@ -44,24 +44,8 @@ const NAV: { href: string; label: string; icon: ReactNode; perm: Permission; gro
   { href: "/audit", label: "Log Aktivitas", icon: <LuHistory />, perm: "audit.view", group: "Sistem" },
 ];
 
-export function Logo({ className, compact }: { className?: string; compact?: boolean }) {
-  return (
-    <span className={cn("flex items-center gap-2.5", className)}>
-      <span className="grid h-8 w-8 grid-cols-2 grid-rows-2 gap-[3px] rounded-lg bg-accent p-[7px]" aria-hidden>
-        <span className="rounded-[2px] bg-accent-ink" />
-        <span className="rounded-[2px] bg-accent-ink/40" />
-        <span className="rounded-[2px] bg-accent-ink/40" />
-        <span className="rounded-[2px] bg-accent-ink" />
-      </span>
-      {!compact && (
-        <span className="leading-none">
-          <span className="block font-display text-[15px] font-bold tracking-tight">Bintaro Works</span>
-          <span className="block text-[10.5px] font-semibold uppercase tracking-[0.14em] opacity-60">Business OS</span>
-        </span>
-      )}
-    </span>
-  );
-}
+import { Logo, logoSrc } from "@/ui/Logo";
+export { Logo, logoSrc };
 
 export function ThemeToggle({ className }: { className?: string }) {
   const [pref, setPref] = useState<ThemePref>("system");
