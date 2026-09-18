@@ -47,7 +47,10 @@ const bodyInner = `<div id="root"></div>
 <script>${js.replace(/<\/script/gi, "<\\/script")}</script>`;
 
 // Versi lengkap untuk dibuka langsung di browser
-writeFileSync(resolve(out, "index.html"), `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">${head}</head><body>${bodyInner}</body></html>`);
+const fullHtml = `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">${head}</head><body>${bodyInner}</body></html>`;
+writeFileSync(resolve(out, "index.html"), fullHtml);
+writeFileSync(resolve(out, "404.html"), fullHtml);
+writeFileSync(resolve(out, ".nojekyll"), "");
 // Versi fragmen (tanpa doctype/head/body) untuk dipublikasikan sebagai Artifact
 writeFileSync(resolve(out, "artifact.html"), `${head}\n${bodyInner}\n`);
 

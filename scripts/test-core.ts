@@ -10,13 +10,15 @@ import { createFakePrisma } from "./fake-prisma";
 import { DEMO_PASSWORD, seedDemo } from "../src/core/seed/demo";
 import type { SessionPayload } from "../src/core/services/auth";
 
+import { fileURLToPath } from "node:url";
+
 const realNow = new Date(process.env.TEST_NOW ?? Date.now());
 const clock = { now: new Date(realNow) };
 // REPO=prisma → uji PrismaRepo (adapter produksi) di atas PrismaClient tiruan yang
 // memvalidasi setiap query terhadap prisma/schema.prisma.
 const usePrismaRepo = process.env.REPO === "prisma" || process.argv.includes("--prisma");
 const db: GlobalRepo = usePrismaRepo
-  ? new PrismaRepo(createFakePrisma(new URL("../prisma/schema.prisma", import.meta.url).pathname).client as never)
+  ? new PrismaRepo(createFakePrisma(fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url))).client as never)
   : new MemoryRepo(undefined, () => new Date(clock.now));
 const deps: Deps = { db, hasher: createWebHasher(1000), now: () => new Date(clock.now) };
 
