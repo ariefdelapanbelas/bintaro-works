@@ -39,6 +39,7 @@ async function handle(req: NextRequest, ctx: Ctx, method: Method) {
       query: Object.fromEntries(req.nextUrl.searchParams.entries()),
       body,
       session,
+      ip: (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip") || undefined,
     },
     (e) => console.error("[api]", method, req.nextUrl.pathname, e),
   );

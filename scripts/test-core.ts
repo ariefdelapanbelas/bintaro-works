@@ -32,11 +32,11 @@ async function test(name: string, fn: () => Promise<void>) {
   }
 }
 
-function client(session: SessionPayload | null = null) {
+function client(session: SessionPayload | null = null, ip?: string) {
   const c = {
     session,
     async call(method: Method, path: string, body?: unknown, query: Record<string, string> = {}) {
-      const req: ApiRequest = { method, path, query, body: body === undefined ? undefined : JSON.parse(JSON.stringify(body)), session: c.session };
+      const req: ApiRequest = { method, path, query, ip, body: body === undefined ? undefined : JSON.parse(JSON.stringify(body)), session: c.session };
       const res = await handleApi(deps, req, (e) => console.error("UNEXPECTED", e));
       if (res.setSession !== undefined) c.session = res.setSession;
       return { status: res.status, body: JSON.parse(JSON.stringify(res.body ?? null)) };
@@ -273,6 +273,185 @@ async function main() {
     assert.equal(r.status, 201, JSON.stringify(r.body));
     const list = (await staff.call("GET", "/requests")).body;
     assert.ok(list.some((x: { id: string }) => x.id === r.body.id));
+  });
+
+  console.log("\nAplikasi pelanggan (publik)");
+  const SLUG = "bintaro-works";
+  await test("halaman publik menampilkan ruang & harga, tanpa data internal", async () => {
+    const r = await client(null, "ip-katalog").call("GET", `/public/${SLUG}`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(r.body.organization.name.length > 0);
+    assert.ok(r.body.rooms.length >= 1, "ada ruang yang bisa dipesan");
+    assert.ok(r.body.products.length >= 5, "ada daftar harga layanan");
+    assert.ok(r.body.rooms.every((x: { hourlyPrice: number }) => typeof x.hourlyPrice === "number"));
+    // tidak boleh membocorkan data internal organisasi
+    assert.equal(r.body.organization.id, undefined);
+    assert.equal(r.body.customers, undefined);
+  });
+  await test("slug tidak dikenal → 404", async () => {
+    assert.equal((await client(null, "ip-404").call("GET", "/public/tidak-ada-slug")).status, 404);
+  });
+  await test("halaman publik bisa dimatikan dari Pengaturan", async () => {
+    assert.equal((await owner.call("PATCH", "/settings/organization", { publicEnabled: false })).status, 200);
+    assert.equal((await client(null, "ip-off").call("GET", `/public/${SLUG}`)).status, 404, "halaman tertutup");
+    assert.equal((await client(null, "ip-off").call("POST", `/public/${SLUG}/inquiries`, { name: "Rudi", phone: "0811" })).status, 404);
+    assert.equal((await owner.call("PATCH", "/settings/organization", { publicEnabled: true, publicTagline: "Ruang kerja siap pakai", whatsapp: "6281287009900" })).status, 200);
+    assert.equal((await client(null, "ip-on").call("GET", `/public/${SLUG}`)).body.organization.tagline, "Ruang kerja siap pakai");
+  });
+  await test("ketersediaan publik hanya menampilkan jam terpakai (judul disembunyikan)", async () => {
+    const pubc = client(null, "ip-avail");
+    const info = (await pubc.call("GET", `/public/${SLUG}`)).body;
+    const room = info.rooms.find((x: { code: string }) => x.code === "MR-01") ?? info.rooms[0];
+    const far = new Date(day.getTime() + 60 * 86_400_000);
+    const b = await staff.call("POST", "/bookings", {
+      spaceId: room.id,
+      guestName: "Tamu internal",
+      title: "Rapat internal rahasia",
+      startAt: iso(new Date(far.getTime() + 9 * H)),
+      endAt: iso(new Date(far.getTime() + 10 * H)),
+      attendees: 3,
+      notes: null,
+    });
+    assert.equal(b.status, 201, JSON.stringify(b.body));
+    const av = await pubc.call("GET", `/public/${SLUG}/availability`, undefined, { spaceId: room.id, date: ymd(far) });
+    assert.equal(av.status, 200, JSON.stringify(av.body));
+    assert.ok(av.body.length >= 1, "jam terpakai terlihat");
+    assert.ok(
+      av.body.every((x: Record<string, unknown>) => Object.keys(x).sort().join(",") === "endAt,startAt"),
+      `hanya startAt & endAt: ${JSON.stringify(av.body[0])}`,
+    );
+    assert.equal((await pubc.call("GET", `/public/${SLUG}/availability`, undefined, { spaceId: "tidak-ada", date: ymd(far) })).status, 404);
+  });
+  await test("form ajukan sewa → lead baru masuk CRM (sumber Website)", async () => {
+    const r = await client(null, "ip-inq").call("POST", `/public/${SLUG}/inquiries`, {
+      name: "Dimas Prayoga",
+      company: "Studio Lentera",
+      phone: "081234500111",
+      email: "dimas@lentera.id",
+      interest: "PRIVATE_OFFICE",
+      people: 6,
+      startMonth: "Oktober 2026",
+      message: "Butuh ruang 6 orang dekat stasiun.",
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const leads = (await staff.call("GET", "/leads")).body;
+    const lead = leads.find((l: { name: string }) => l.name === "Dimas Prayoga");
+    assert.ok(lead, "lead terlihat oleh tim");
+    assert.equal(lead.source, "WEBSITE");
+    assert.equal(lead.stage, "NEW");
+    const detail = (await staff.call("GET", `/leads/${lead.id}`)).body;
+    assert.equal(detail.company, "Studio Lentera");
+    assert.ok(detail.notes.includes("6 orang"), detail.notes);
+    assert.ok(detail.notes.includes("Oktober 2026"), detail.notes);
+  });
+  await test("rate limit: pengajuan berulang dari IP sama ditolak", async () => {
+    const spam = client(null, "ip-spam");
+    let blocked = 0;
+    for (let i = 0; i < 7; i++) {
+      const r = await spam.call("POST", `/public/${SLUG}/inquiries`, { name: `Spam ${i}`, phone: "08000000000" });
+      if (r.status === 409) blocked++;
+    }
+    assert.ok(blocked >= 2, `permintaan berlebih diblokir (blocked=${blocked})`);
+    // IP lain tetap bisa mengirim
+    assert.equal((await client(null, "ip-lain").call("POST", `/public/${SLUG}/inquiries`, { name: "Nina", phone: "0811111" })).status, 201);
+  });
+  await test("daftar akun sendiri → langsung bisa booking dari portal", async () => {
+    const self = client(null, "ip-daftar");
+    const r = await self.call("POST", `/public/${SLUG}/register`, {
+      name: "Rani Kusuma",
+      company: "Rani Craft",
+      email: "rani@ranicraft.id",
+      phone: "081299887766",
+      password: "rahasia123",
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(r.body.redirectTo, "/portal");
+    assert.equal(self.session?.role, "CUSTOMER");
+    const ov = await self.call("GET", "/portal/overview");
+    assert.equal(ov.status, 200, JSON.stringify(ov.body));
+    assert.equal(ov.body.customer.name, "Rani Craft");
+    assert.equal(ov.body.invoices.length, 0, "pelanggan baru belum punya tagihan");
+    const ps = (await self.call("GET", "/portal/spaces")).body;
+    const room = ps.find((x: { code: string }) => x.code === "MR-02") ?? ps[0];
+    const far = new Date(day.getTime() + 75 * 86_400_000);
+    const bk = await self.call("POST", "/portal/bookings", {
+      spaceId: room.id,
+      title: "Trial meeting",
+      startAt: iso(new Date(far.getTime() + 13 * H)),
+      endAt: iso(new Date(far.getTime() + 14 * H)),
+      attendees: 2,
+    });
+    assert.equal(bk.status, 201, JSON.stringify(bk.body));
+    // tim melihat pelanggan baru ini
+    const custs = (await staff.call("GET", "/customers")).body;
+    assert.ok(custs.some((c: { name: string }) => c.name === "Rani Craft"));
+  });
+  await test("email yang sudah dipakai tidak bisa mendaftar lagi", async () => {
+    const r = await client(null, "ip-dup").call("POST", `/public/${SLUG}/register`, {
+      name: "Rani Palsu",
+      email: "rani@ranicraft.id",
+      phone: "081200000000",
+      password: "rahasia123",
+    });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /sudah terdaftar/i);
+  });
+
+  console.log("\nKonfirmasi pembayaran pelanggan");
+  const OPEN = ["SENT", "PARTIAL", "OVERDUE"];
+  await test("pelanggan konfirmasi bayar → tim verifikasi → invoice terbayar", async () => {
+    const invs = (await portal.call("GET", "/portal/overview")).body.invoices;
+    const target = invs.find((i: { status: string; outstanding: number; confirmation: unknown }) => OPEN.includes(i.status) && i.outstanding > 0 && !i.confirmation);
+    assert.ok(target, "ada tagihan yang bisa dikonfirmasi");
+    const amount = Math.min(500_000, target.outstanding);
+    const sent = await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, {
+      amount,
+      method: "TRANSFER",
+      paidAt: ymd(realNow),
+      reference: "TRX-99001",
+      note: "Sudah transfer via BCA",
+    });
+    assert.equal(sent.status, 201, JSON.stringify(sent.body));
+    assert.equal(sent.body.status, "PENDING");
+    // tidak boleh kirim dua kali selagi menunggu
+    assert.equal((await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, { amount, paidAt: ymd(realNow) })).status, 409);
+    // muncul di panel keuangan
+    const pending = (await finance.call("GET", "/payment-confirmations", undefined, { status: "PENDING" })).body;
+    const row = pending.find((x: { id: string }) => x.id === sent.body.id);
+    assert.ok(row, "terlihat oleh finance");
+    assert.equal(row.invoiceNumber, target.number);
+    assert.equal(row.customerName, "PT Kopi Kita Nusantara");
+    // staf operasional tidak boleh memverifikasi
+    assert.equal((await staff.call("POST", `/payment-confirmations/${sent.body.id}/accept`, {})).status, 403);
+    const before = (await finance.call("GET", `/invoices/${target.id}`)).body.amountPaid;
+    const acc = await finance.call("POST", `/payment-confirmations/${sent.body.id}/accept`, { reviewNote: "Dana masuk" });
+    assert.equal(acc.status, 201, JSON.stringify(acc.body));
+    assert.equal(acc.body.confirmation.status, "ACCEPTED");
+    assert.equal(acc.body.invoice.amountPaid, before + amount);
+    assert.ok(["PARTIAL", "PAID"].includes(acc.body.invoice.status), acc.body.invoice.status);
+    // tidak bisa diproses dua kali
+    assert.equal((await finance.call("POST", `/payment-confirmations/${sent.body.id}/accept`, {})).status, 409);
+  });
+  await test("konfirmasi melebihi sisa tagihan ditolak", async () => {
+    const invs = (await portal.call("GET", "/portal/overview")).body.invoices;
+    const target = invs.find((i: { status: string; outstanding: number; confirmation: unknown }) => OPEN.includes(i.status) && i.outstanding > 0 && !i.confirmation);
+    if (!target) return;
+    const r = await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, { amount: target.outstanding + 1_000_000, paidAt: ymd(realNow) });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+  });
+  await test("konfirmasi bisa ditolak dengan catatan, tanpa mengubah tagihan", async () => {
+    const invs = (await portal.call("GET", "/portal/overview")).body.invoices;
+    const target = invs.find((i: { status: string; outstanding: number; confirmation: unknown }) => OPEN.includes(i.status) && i.outstanding > 0 && !i.confirmation);
+    if (!target) return;
+    const sent = await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, { amount: 100_000, paidAt: ymd(realNow), reference: "SALAH-01" });
+    assert.equal(sent.status, 201, JSON.stringify(sent.body));
+    const before = (await finance.call("GET", `/invoices/${target.id}`)).body.amountPaid;
+    const rej = await finance.call("POST", `/payment-confirmations/${sent.body.id}/reject`, { reviewNote: "Bukti transfer tidak terbaca" });
+    assert.equal(rej.status, 201, JSON.stringify(rej.body));
+    assert.equal(rej.body.status ?? rej.body.confirmation?.status, "REJECTED");
+    assert.equal((await finance.call("GET", `/invoices/${target.id}`)).body.amountPaid, before, "tagihan tidak berubah");
+    // setelah ditolak, pelanggan boleh mengirim ulang
+    assert.equal((await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, { amount: 100_000, paidAt: ymd(realNow) })).status, 201);
   });
 
   console.log("\nMulti-tenant");

@@ -1,7 +1,7 @@
 import { addDays, addMonths, monthEndUTC, monthStartUTC, startOfDayUTC, businessToday } from "../domain/dates";
-import { AppError, badRequest, conflict } from "../domain/errors";
-import type { Contract, Invoice, InvoiceItem, InvoiceStatus, Payment } from "../domain/types";
-import { generateSchema, invoiceSchema, invoiceUpdateSchema, parse, paymentSchema } from "../domain/validation";
+import { AppError, badRequest, conflict, notFound } from "../domain/errors";
+import type { Contract, Invoice, InvoiceItem, InvoiceStatus, Payment, PaymentConfirmation } from "../domain/types";
+import { confirmationReviewSchema, generateSchema, invoiceSchema, invoiceUpdateSchema, parse, paymentConfirmationSchema, paymentSchema } from "../domain/validation";
 import { audit, byId, includesText, mustGet, tx, type Svc } from "./context";
 
 export interface ItemInput {
@@ -380,4 +380,94 @@ export type InvoiceWithItems = Invoice & { items: InvoiceItem[] };
 
 export function ensurePositive(n: number, label: string) {
   if (n <= 0) throw badRequest(`${label} harus lebih dari 0`);
+}
+
+// ---------------- Konfirmasi pembayaran dari pelanggan ----------------
+
+/** Pelanggan (portal) mengirim bukti/konfirmasi transfer untuk diverifikasi finance. */
+export async function submitPaymentConfirmation(s: Svc, invoiceId: string, body: unknown) {
+  const input = parse(paymentConfirmationSchema, body);
+  const inv = await mustGet(s.repo.invoice.get(invoiceId), "Invoice");
+  if (s.auth.role === "CUSTOMER" && inv.customerId !== s.auth.customerId) throw notFound("Invoice");
+  if (inv.status === "DRAFT" || inv.status === "VOID") throw conflict("Invoice ini belum aktif");
+  if (inv.status === "PAID") throw conflict("Invoice sudah lunas");
+  const pending = await s.repo.paymentConfirmation.findFirst({ invoiceId, status: "PENDING" });
+  if (pending) throw conflict("Konfirmasi sebelumnya masih menunggu verifikasi tim kami");
+  if (input.amount > outstandingOf(inv)) {
+    throw new AppError("VALIDATION", `Jumlah melebihi sisa tagihan (${outstandingOf(inv)})`, { amount: "melebihi sisa tagihan" });
+  }
+  const conf = await s.repo.paymentConfirmation.create({
+    invoiceId,
+    amount: input.amount,
+    method: input.method,
+    paidAt: input.paidAt,
+    reference: input.reference ?? null,
+    note: input.note ?? null,
+    status: "PENDING",
+    reviewedById: null,
+    reviewNote: null,
+    paymentId: null,
+    createdById: s.auth.userId,
+  });
+  await audit(s, "payment.confirm", "Invoice", invoiceId, `Konfirmasi pembayaran ${inv.number} menunggu verifikasi`);
+  return conf;
+}
+
+export async function listPaymentConfirmations(s: Svc, q: { status?: string }) {
+  const [rows, invoices, customers] = await Promise.all([
+    s.repo.paymentConfirmation.list({
+      where: q.status ? { status: q.status as PaymentConfirmation["status"] } : undefined,
+      orderBy: { field: "createdAt", dir: "desc" },
+      take: 200,
+    }),
+    s.repo.invoice.list(),
+    s.repo.customer.list(),
+  ]);
+  const imap = byId(invoices);
+  const cmap = byId(customers);
+  return rows.map((r) => {
+    const inv = imap.get(r.invoiceId);
+    return {
+      ...r,
+      invoiceNumber: inv?.number ?? "-",
+      invoiceTotal: inv?.total ?? 0,
+      outstanding: inv ? outstandingOf(inv) : 0,
+      customerName: inv ? cmap.get(inv.customerId)?.name ?? "-" : "-",
+    };
+  });
+}
+
+/** Finance menyetujui konfirmasi → tercatat sebagai pembayaran sungguhan. */
+export async function acceptPaymentConfirmation(s: Svc, id: string, body: unknown) {
+  const input = parse(confirmationReviewSchema, body);
+  const conf = await mustGet(s.repo.paymentConfirmation.get(id), "Konfirmasi pembayaran");
+  if (conf.status !== "PENDING") throw conflict("Konfirmasi ini sudah diproses");
+  const result = await recordPayment(s, conf.invoiceId, {
+    amount: conf.amount,
+    method: conf.method,
+    paidAt: conf.paidAt,
+    reference: conf.reference,
+    notes: conf.note,
+  });
+  const updated = await s.repo.paymentConfirmation.update(id, {
+    status: "ACCEPTED",
+    reviewedById: s.auth.userId,
+    reviewNote: input.reviewNote ?? null,
+    paymentId: result.payment.id,
+  });
+  await audit(s, "payment.confirm.accept", "Invoice", conf.invoiceId, `Verifikasi pembayaran ${result.invoice.number} disetujui`);
+  return { confirmation: updated, invoice: result.invoice };
+}
+
+export async function rejectPaymentConfirmation(s: Svc, id: string, body: unknown) {
+  const input = parse(confirmationReviewSchema, body);
+  const conf = await mustGet(s.repo.paymentConfirmation.get(id), "Konfirmasi pembayaran");
+  if (conf.status !== "PENDING") throw conflict("Konfirmasi ini sudah diproses");
+  const updated = await s.repo.paymentConfirmation.update(id, {
+    status: "REJECTED",
+    reviewedById: s.auth.userId,
+    reviewNote: input.reviewNote ?? null,
+  });
+  await audit(s, "payment.confirm.reject", "Invoice", conf.invoiceId, "Konfirmasi pembayaran ditolak");
+  return updated;
 }

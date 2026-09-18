@@ -5,9 +5,10 @@ import type { AuditLog, Organization, Role } from "@/core/domain/types";
 import { api } from "@/client/api";
 import { dateTime, relative, ROLE_LABEL } from "@/client/format";
 import { useApi, useMutation } from "@/client/hooks";
+import { Link } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { ConfirmDialog, Modal, useToast } from "@/ui/overlay";
-import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Input, PageHeader, Select, Spinner, Tabs } from "@/ui/primitives";
+import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Input, PageHeader, Select, Spinner, Switch, Tabs, Textarea } from "@/ui/primitives";
 
 type Member = { membershipId: string; userId: string; name: string; email: string; role: Role; isActive: boolean; lastLoginAt: string | null; isSelf: boolean };
 
@@ -23,6 +24,7 @@ function OrganizationForm() {
   const { refresh } = useSession();
   const { data, error, reload } = useApi<Organization>("/settings/organization");
   const [v, setV] = useState<Record<string, string>>({});
+  const [publicEnabled, setPublicEnabled] = useState(true);
   useEffect(() => {
     if (data)
       setV({
@@ -38,7 +40,10 @@ function OrganizationForm() {
         bankName: data.bankName ?? "",
         bankAccountNo: data.bankAccountNo ?? "",
         bankAccountName: data.bankAccountName ?? "",
+        whatsapp: data.whatsapp ?? "",
+        publicTagline: data.publicTagline ?? "",
       });
+    if (data) setPublicEnabled(data.publicEnabled);
   }, [data]);
   const save = useMutation(() =>
     api.patch("/settings/organization", {
@@ -48,6 +53,7 @@ function OrganizationForm() {
       paymentTermDays: Number(v.paymentTermDays),
       invoicePrefix: v.invoicePrefix,
       contractPrefix: v.contractPrefix,
+      publicEnabled,
     }),
   );
   const f = save.error?.fields ?? {};
@@ -91,6 +97,22 @@ function OrganizationForm() {
           {input("bankName", "Bank")}
           {input("bankAccountNo", "No. rekening", { className: "font-mono" })}
           <div className="sm:col-span-2">{input("bankAccountName", "Atas nama")}</div>
+        </div>
+      </Card>
+      <Card title="Aplikasi pelanggan" subtitle="Halaman publik tempat calon pelanggan melihat harga, booking ruang, dan mendaftar sendiri">
+        <div className="flex flex-col gap-4">
+          <Switch id="org-public" checked={publicEnabled} onChange={setPublicEnabled} label="Aktifkan halaman publik" />
+          <Field label="Kalimat pembuka" htmlFor="org-publicTagline" hint="Tampil sebagai judul besar di halaman depan">
+            <Textarea id="org-publicTagline" rows={2} value={v.publicTagline ?? ""} onChange={(e) => setV({ ...v, publicTagline: e.target.value })} />
+          </Field>
+          {input("whatsapp", "Nomor WhatsApp", { placeholder: "6281287009900", hint: "Format internasional tanpa tanda + (untuk tombol chat)" })}
+          <div className="rounded-xl border border-dashed border-line px-4 py-3 text-[13px]">
+            Alamat halaman pelanggan:{" "}
+            <Link href={`/o/${data.slug}`} className="font-semibold text-accent hover:underline">
+              /o/{data.slug}
+            </Link>
+            <p className="mt-1 text-xs text-faint">Bagikan tautan ini di Instagram, Google Maps, atau QR code di resepsionis.</p>
+          </div>
         </div>
       </Card>
       <div className="flex justify-end">

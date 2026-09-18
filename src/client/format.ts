@@ -187,6 +187,12 @@ export const PAYMENT_METHOD: Record<PaymentMethod, string> = {
   CARD: "Kartu",
 };
 
+export const CONFIRMATION_STATUS: Record<string, [string, Tone]> = {
+  PENDING: ["Menunggu verifikasi", "warn"],
+  ACCEPTED: ["Diverifikasi", "good"],
+  REJECTED: ["Ditolak", "bad"],
+};
+
 export const REQUEST_STATUS: Record<RequestStatus, [string, Tone]> = {
   OPEN: ["Baru", "info"],
   IN_PROGRESS: ["Diproses", "warn"],

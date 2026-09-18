@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { LuArrowLeft, LuBan, LuCalendarSync, LuCirclePlus, LuFilePlus2, LuPencil, LuPrinter, LuSend, LuTrash2, LuWallet, LuX } from "react-icons/lu";
-import { INVOICE_STATUSES, PAYMENT_METHODS, type Customer, type Invoice, type InvoiceItem, type Payment, type Product } from "@/core/domain/types";
+import { INVOICE_STATUSES, PAYMENT_METHODS, type Customer, type Invoice, type InvoiceItem, type Payment, type PaymentConfirmation, type Product } from "@/core/domain/types";
 import { api } from "@/client/api";
-import { date, dateTime, INVOICE_STATUS, isoDate, PAYMENT_METHOD, rupiah, todayISO, UNIT_LABEL } from "@/client/format";
+import { CONFIRMATION_STATUS, date, dateTime, INVOICE_STATUS, isoDate, PAYMENT_METHOD, relative, rupiah, todayISO, UNIT_LABEL } from "@/client/format";
 import { useApi, useDebounced, useMutation } from "@/client/hooks";
 import { Link, useNav, useSearchParam } from "@/client/nav";
 import { useSession } from "@/client/session";
@@ -291,7 +291,7 @@ export function BillingPage() {
   const newParam = useSearchParam("new");
   const presetCustomer = useSearchParam("customerId");
   const genParam = useSearchParam("generate");
-  const [tab, setTab] = useState<"invoices" | "payments">("invoices");
+  const [tab, setTab] = useState<"invoices" | "payments" | "confirmations">("invoices");
   const [status, setStatus] = useState(initialStatus);
   const [q, setQ] = useState("");
   const dq = useDebounced(q);
@@ -304,6 +304,8 @@ export function BillingPage() {
   const summary = useApi<{ outstanding: number; overdue: number; overdueCount: number; collectedThisMonth: number; draftCount: number }>("/invoices/summary");
   const invoices = useApi<InvoiceRow[]>(tab === "invoices" ? "/invoices" : null, { status, q: dq });
   const payments = useApi<(Payment & { invoiceNumber: string; customerName: string })[]>(tab === "payments" ? "/payments" : null);
+  const confirmations = useApi<ConfirmationRow[]>("/payment-confirmations");
+  const pendingCount = (confirmations.data ?? []).filter((c) => c.status === "PENDING").length;
   const manage = can("billing.manage");
   const s = summary.data;
 
@@ -337,9 +339,12 @@ export function BillingPage() {
         tabs={[
           { value: "invoices", label: "Invoice" },
           { value: "payments", label: "Pembayaran" },
+          { value: "confirmations", label: "Konfirmasi pelanggan", count: pendingCount || undefined },
         ]}
       />
-      {tab === "invoices" ? (
+      {tab === "confirmations" ? (
+        <ConfirmationsPanel rows={confirmations.data} manage={manage} />
+      ) : tab === "invoices" ? (
         <>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Input id="inv-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nomor atau pelanggan…" className="w-full sm:w-72" />
@@ -434,6 +439,94 @@ export function BillingPage() {
       <InvoiceFormModal open={creating} onClose={() => setCreating(false)} presetCustomerId={presetCustomer} onSaved={(i) => push(`/billing/${i.id}`)} />
       <GenerateModal open={generating} onClose={() => setGenerating(false)} />
     </div>
+  );
+}
+
+type ConfirmationRow = PaymentConfirmation & { invoiceNumber: string; invoiceTotal: number; outstanding: number; customerName: string };
+
+/** Verifikasi konfirmasi transfer yang dikirim pelanggan lewat portal. */
+function ConfirmationsPanel({ rows, manage }: { rows?: ConfirmationRow[]; manage: boolean }) {
+  const toast = useToast();
+  const { push } = useNav();
+  const [reject, setReject] = useState<ConfirmationRow | null>(null);
+  const [note, setNote] = useState("");
+  const accept = useMutation((id: string) => api.post(`/payment-confirmations/${id}/accept`, {}));
+  const doReject = useMutation((id: string, reviewNote: string) => api.post(`/payment-confirmations/${id}/reject`, { reviewNote }));
+
+  if (!rows) return <Spinner />;
+  if (rows.length === 0) return <div className="card"><Empty title="Belum ada konfirmasi pembayaran" description="Konfirmasi transfer yang dikirim pelanggan dari portal muncul di sini." /></div>;
+
+  return (
+    <>
+      <div className="card divide-y divide-line">
+        {rows.map((c) => (
+          <div key={c.id} className="flex flex-wrap items-start gap-4 p-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <button className="font-mono text-xs font-semibold text-accent hover:underline" onClick={() => push(`/billing/${c.invoiceId}`)}>
+                  {c.invoiceNumber}
+                </button>
+                <span className="font-semibold">{c.customerName}</span>
+                <StatusBadge map={CONFIRMATION_STATUS} value={c.status} />
+              </div>
+              <p className="mt-1 text-[13px] text-muted">
+                {PAYMENT_METHOD[c.method]} · {date(c.paidAt, "long")} · {c.reference ? <span className="font-mono">{c.reference}</span> : "tanpa referensi"} · dikirim {relative(c.createdAt)}
+              </p>
+              {c.note && <p className="mt-1 text-[13px]">{c.note}</p>}
+              {c.reviewNote && <p className="mt-1 text-[12.5px] text-faint">Catatan verifikasi: {c.reviewNote}</p>}
+            </div>
+            <div className="text-right">
+              <p className="num font-display text-lg font-bold">{rupiah(c.amount)}</p>
+              <p className="text-xs text-muted">sisa tagihan {rupiah(c.outstanding)}</p>
+            </div>
+            {manage && c.status === "PENDING" && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={accept.pending}
+                  onClick={async () => {
+                    try {
+                      await accept.run(c.id);
+                      toast.success("Pembayaran tercatat");
+                    } catch (e) {
+                      toast.error((e as Error).message);
+                    }
+                  }}
+                >
+                  Terima
+                </Button>
+                <Button size="sm" onClick={() => (setNote(""), setReject(c))}>
+                  Tolak
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <ConfirmDialog
+        open={!!reject}
+        onClose={() => setReject(null)}
+        title="Tolak konfirmasi pembayaran"
+        message="Pelanggan akan melihat status ditolak dan bisa mengirim ulang konfirmasi."
+        confirmLabel="Tolak"
+        danger
+        loading={doReject.pending}
+        onConfirm={async () => {
+          try {
+            await doReject.run(reject!.id, note);
+            toast.success("Konfirmasi ditolak");
+            setReject(null);
+          } catch (e) {
+            toast.error((e as Error).message);
+          }
+        }}
+      >
+        <Field label="Alasan (dilihat pelanggan)" htmlFor="rej-note">
+          <Input id="rej-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="mis. dana belum masuk rekening" />
+        </Field>
+      </ConfirmDialog>
+    </>
   );
 }
 

@@ -140,6 +140,12 @@ enum PaymentMethod {
   CARD
 }
 
+enum ConfirmationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 enum RequestStatus {
   OPEN
   IN_PROGRESS
@@ -170,6 +176,9 @@ model Organization {
   bankName       String?
   bankAccountNo  String?
   bankAccountName String?
+  whatsapp       String?
+  publicEnabled  Boolean  @default(true)
+  publicTagline  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -189,6 +198,7 @@ model Organization {
   serviceRequests ServiceRequest[]
   auditLogs       AuditLog[]
   counters        Counter[]
+  paymentConfirmations PaymentConfirmation[]
 }
 
 model User {
@@ -473,8 +483,9 @@ model Invoice {
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
   contract     Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  items        InvoiceItem[]
-  payments     Payment[]
+  items         InvoiceItem[]
+  payments      Payment[]
+  confirmations PaymentConfirmation[]
 
   @@unique([organizationId, number])
   @@index([organizationId, status])
@@ -496,6 +507,30 @@ model InvoiceItem {
   product      Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, invoiceId])
+}
+
+/// Konfirmasi pembayaran yang dikirim pelanggan lewat portal; diverifikasi finance.
+model PaymentConfirmation {
+  id             String             @id @default(cuid())
+  organizationId String
+  invoiceId      String
+  amount         Int
+  method         PaymentMethod      @default(TRANSFER)
+  paidAt         DateTime
+  reference      String?
+  note           String?
+  status         ConfirmationStatus @default(PENDING)
+  reviewedById   String?
+  reviewNote     String?
+  paymentId      String?
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
 }
 
 model Payment {

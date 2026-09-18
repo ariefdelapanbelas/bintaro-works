@@ -13,6 +13,7 @@ import { CatalogPage } from "./catalog/CatalogPage";
 import { RequestsPage } from "./requests/RequestsPage";
 import { AuditPage, SettingsPage } from "./settings/SettingsPages";
 import { PortalBookingsPage, PortalHomePage, PortalInvoicePage, PortalInvoicesPage, PortalRequestsPage } from "./portal/PortalPages";
+import { PublicHomePage, PublicInquiryPage } from "./public/PublicApp";
 
 export interface RouteDef {
   pattern: string;
@@ -21,6 +22,8 @@ export interface RouteDef {
 }
 
 export const ROUTES: RouteDef[] = [
+  { pattern: "/o/:slug", shell: "none", render: (p) => <PublicHomePage slug={p.slug} /> },
+  { pattern: "/o/:slug/sewa", shell: "none", render: (p) => <PublicInquiryPage slug={p.slug} /> },
   { pattern: "/login", shell: "none", render: () => <LoginPage /> },
   { pattern: "/signup", shell: "none", render: () => <SignupPage /> },
   { pattern: "/dashboard", shell: "app", render: () => <DashboardPage /> },

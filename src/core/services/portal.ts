@@ -1,7 +1,7 @@
 import { businessToday } from "../domain/dates";
 import { forbidden, notFound } from "../domain/errors";
 import { parse, requestSchema } from "../domain/validation";
-import { OPEN_INVOICE, getInvoice, outstandingOf, refreshInvoiceStatuses } from "./billing";
+import { OPEN_INVOICE, getInvoice, outstandingOf, refreshInvoiceStatuses, submitPaymentConfirmation } from "./billing";
 import { availability, cancelBooking, createPortalBooking } from "./bookings";
 import { audit, byId, type Svc } from "./context";
 
@@ -13,12 +13,13 @@ function customerIdOf(s: Svc) {
 export async function portalOverview(s: Svc) {
   const customerId = customerIdOf(s);
   await refreshInvoiceStatuses(s);
-  const [customer, contracts, invoices, bookings, requests, spaces, org] = await Promise.all([
+  const [customer, contracts, invoices, bookings, requests, confirmations, spaces, org] = await Promise.all([
     s.repo.customer.get(customerId),
     s.repo.contract.list({ where: { customerId, status: ["ACTIVE", "EXPIRED"] }, orderBy: { field: "endDate", dir: "desc" } }),
     s.repo.invoice.list({ where: { customerId }, orderBy: { field: "issueDate", dir: "desc" } }),
     s.repo.booking.list({ where: { customerId, status: ["CONFIRMED", "PENDING"] }, orderBy: { field: "startAt", dir: "asc" } }),
     s.repo.serviceRequest.list({ where: { customerId }, orderBy: { field: "createdAt", dir: "desc" } }),
+    s.repo.paymentConfirmation.list({ orderBy: { field: "createdAt", dir: "desc" }, take: 50 }),
     s.repo.space.list(),
     s.repo.organization(),
   ]);
@@ -48,7 +49,13 @@ export async function portalOverview(s: Svc) {
       spaceName: c.spaceId ? smap.get(c.spaceId)?.name ?? null : null,
       daysLeft: Math.ceil((new Date(c.endDate).getTime() - today) / 86_400_000),
     })),
-    invoices: invoices.filter((i) => i.status !== "DRAFT").map((i) => ({ ...i, outstanding: outstandingOf(i) })),
+    invoices: invoices
+      .filter((i) => i.status !== "DRAFT")
+      .map((i) => ({
+        ...i,
+        outstanding: outstandingOf(i),
+        confirmation: confirmations.find((c) => c.invoiceId === i.id && c.status !== "REJECTED") ?? confirmations.find((c) => c.invoiceId === i.id) ?? null,
+      })),
     bookings: bookings
       .filter((b) => new Date(b.endAt).getTime() >= s.now.getTime())
       .map((b) => ({ ...b, spaceName: smap.get(b.spaceId)?.name ?? "-" })),
@@ -84,6 +91,11 @@ export async function portalCreateBooking(s: Svc, body: unknown) {
 export async function portalCancelBooking(s: Svc, id: string) {
   customerIdOf(s);
   return cancelBooking(s, id);
+}
+
+export async function portalConfirmPayment(s: Svc, invoiceId: string, body: unknown) {
+  customerIdOf(s);
+  return submitPaymentConfirmation(s, invoiceId, body);
 }
 
 export async function portalCreateRequest(s: Svc, body: unknown) {

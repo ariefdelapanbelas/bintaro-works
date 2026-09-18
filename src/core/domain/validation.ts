@@ -311,7 +311,41 @@ export const organizationSchema = z.object({
   bankName: optStr(80),
   bankAccountNo: optStr(40),
   bankAccountName: optStr(120),
+  whatsapp: optStr(40),
+  publicEnabled: z.coerce.boolean().optional(),
+  publicTagline: optStr(160),
 });
+export const publicInquirySchema = z.object({
+  name: str(2, 120),
+  company: optStr(160),
+  phone: str(6, 40),
+  email: optEmail,
+  interest: z.enum(PRODUCT_CATEGORIES).default("PRIVATE_OFFICE"),
+  people: int(1, 500).optional(),
+  startMonth: optStr(20),
+  message: optStr(1500),
+});
+
+export const publicRegisterSchema = z.object({
+  name: str(2, 120),
+  company: optStr(160),
+  email,
+  phone: str(6, 40),
+  password,
+});
+
+export const paymentConfirmationSchema = z.object({
+  amount: money.refine((v) => v > 0, "harus lebih dari 0"),
+  method: z.enum(PAYMENT_METHODS).default("TRANSFER"),
+  paidAt: date,
+  reference: optStr(120),
+  note: optStr(500),
+});
+
+export const confirmationReviewSchema = z.object({
+  reviewNote: optStr(500),
+});
+
 export const teamMemberSchema = z.object({
   name: str(2, 120),
   email,

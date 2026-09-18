@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2023", "dom"], "strict": true, "noEmit": true, "skipLibCheck": true,
+    "module": "ESNext", "moduleResolution": "bundler", "esModuleInterop": true, "types": ["node"],
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src/core/**/*.ts"]
+}

@@ -225,6 +225,17 @@ await step("portal pelanggan: booking + permintaan", async () => {
   await page.getByText("Ditagihkan kepada").waitFor();
 });
 
+await step("portal: konfirmasi pembayaran tagihan", async () => {
+  await go("/portal/invoices");
+  await page.getByRole("button", { name: "Konfirmasi bayar" }).first().click();
+  await page.waitForSelector("#cf-amount");
+  await page.fill("#cf-ref", "TRX-KONF-001");
+  await page.getByRole("dialog").getByRole("button", { name: "Kirim konfirmasi" }).click();
+  await toast("sedang diverifikasi");
+  await page.getByText("Menunggu verifikasi").first().waitFor({ timeout: 4000 });
+  await page.screenshot({ path: `${shots}/portal-konfirmasi-bayar.png`, fullPage: false });
+});
+
 await step("mobile layout (390px) + dark mode", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   await go("/portal");
@@ -248,6 +259,97 @@ await step("mobile layout (390px) + dark mode", async () => {
   await go("/spaces");
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${shots}/spaces-dark.png` });
+});
+
+const pubEmail = `rani.e2e.${Date.now()}@contoh.id`;
+
+await step("aplikasi pelanggan: beranda publik (tanpa login)", async () => {
+  await page.getByRole("button", { name: "Keluar" }).first().click();
+  await page.waitForSelector("#login-email");
+  await go("/o/bintaro-works");
+  await page.getByRole("heading", { level: 2, name: "Booking per jam" }).waitFor({ timeout: 8000 });
+  await page.getByRole("heading", { level: 2, name: "Layanan & harga" }).waitFor();
+  const rooms = await page.locator("#ruang button.card").count();
+  if (rooms < 1) throw new Error("tidak ada ruang yang tampil di halaman publik");
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${shots}/publik-beranda.png`, fullPage: true });
+});
+
+await step("aplikasi pelanggan: ajukan sewa kantor → lead", async () => {
+  await page.getByRole("link", { name: "Ajukan sewa kantor" }).click();
+  await page.waitForSelector("#iq-name");
+  await page.fill("#iq-name", "Dimas E2E");
+  await page.fill("#iq-company", "Studio Lentera");
+  await page.fill("#iq-phone", "081234500111");
+  await page.fill("#iq-email", "dimas.e2e@lentera.id");
+  await page.fill("#iq-people", "6");
+  await page.fill("#iq-start", "Oktober 2026");
+  await page.screenshot({ path: `${shots}/publik-ajukan-sewa.png`, fullPage: true });
+  await page.getByRole("button", { name: "Kirim pengajuan" }).click();
+  await page.getByText("Pengajuan terkirim").waitFor({ timeout: 6000 });
+});
+
+await step("aplikasi pelanggan: daftar akun sendiri lalu booking", async () => {
+  await go("/o/bintaro-works");
+  await page.locator("#ruang button.card").first().click();
+  await page.waitForSelector("#pb-date");
+  const d = new Date(Date.now() + 7 * 3600e3 + 40 * 86400e3).toISOString().slice(0, 10);
+  await page.fill("#pb-date", d);
+  await page.selectOption("#pb-start", "09:00");
+  await page.selectOption("#pb-end", "11:00");
+  await page.fill("#pb-title", "Rapat tim E2E");
+  await page.screenshot({ path: `${shots}/publik-booking-waktu.png`, fullPage: false });
+  await page.getByRole("dialog").getByRole("button", { name: "Lanjutkan" }).click();
+  await page.waitForSelector("#ac-name");
+  await page.fill("#ac-name", "Rani Kusuma");
+  await page.fill("#ac-company", "Rani Craft");
+  await page.fill("#ac-phone", "081299887766");
+  await page.fill("#ac-email", pubEmail);
+  await page.fill("#ac-password", "rahasia123");
+  await page.getByRole("dialog").getByRole("button", { name: "Daftar & booking" }).click();
+  await page.getByText("Booking terkonfirmasi").first().waitFor({ timeout: 10000 });
+  await page.screenshot({ path: `${shots}/publik-booking-selesai.png`, fullPage: false });
+  await page.getByRole("button", { name: "Lihat booking & tagihan" }).click();
+  await page.getByRole("heading", { name: /Halo, Rani/ }).waitFor({ timeout: 8000 });
+});
+
+await step("admin melihat hasil dari aplikasi pelanggan", async () => {
+  await page.getByRole("button", { name: "Keluar" }).first().click();
+  await page.waitForSelector("#login-email");
+  await page.getByRole("button", { name: "Owner" }).click();
+  await page.click("button[type=submit]");
+  await page.waitForSelector("text=Kas masuk 6 bulan terakhir");
+  await go("/crm");
+  await page.getByRole("button", { name: "Tabel" }).click();
+  await page.getByText("Dimas E2E").first().waitFor({ timeout: 6000 });
+  await go("/customers");
+  await page.getByText("Rani Craft").first().waitFor({ timeout: 6000 });
+  await go("/billing");
+  await page.getByRole("tab", { name: /Konfirmasi pelanggan/ }).click();
+  await page.getByText("TRX-KONF-001").first().waitFor({ timeout: 6000 });
+  await page.screenshot({ path: `${shots}/admin-konfirmasi-pelanggan.png`, fullPage: false });
+  await page.getByRole("button", { name: "Terima" }).first().click();
+  await toast("Pembayaran tercatat");
+  await page.getByText("Diverifikasi").first().waitFor({ timeout: 5000 });
+  await page.screenshot({ path: `${shots}/admin-konfirmasi-diverifikasi.png`, fullPage: false });
+});
+
+await step("aplikasi pelanggan di HP (390px)", async () => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await go("/o/bintaro-works");
+  await page.getByRole("heading", { level: 2, name: "Booking per jam" }).waitFor({ timeout: 8000 });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${shots}/mobile-publik.png`, fullPage: false });
+  const overflow = await page.evaluate(() => {
+    if (document.documentElement.scrollWidth <= window.innerWidth + 1) return null;
+    return [...document.querySelectorAll("body *")]
+      .filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1 && !el.closest(".overflow-x-auto"))
+      .slice(0, 6)
+      .map((el) => `${el.tagName}.${String(el.className).slice(0, 80)}`)
+      .join(" | ");
+  });
+  if (overflow) throw new Error("halaman publik meluber horizontal di mobile: " + overflow);
+  await page.setViewportSize({ width: 1440, height: 900 });
 });
 
 await browser.close();

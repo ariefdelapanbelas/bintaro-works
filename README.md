@@ -19,7 +19,9 @@ Business operating system multi-tenant untuk operator **workspace & business ser
 | **Tagihan** | Invoice manual dengan item katalog, diskon, PPN; draft → terbit; **generate tagihan bulanan dari kontrak (idempoten)**; catat pembayaran parsial/lunas, hapus pembayaran; status jatuh tempo otomatis; lembar invoice siap cetak/PDF |
 | **Katalog Layanan** | Daftar harga per lini bisnis & satuan (bulan/jam/pcs/paket); produk yang sudah dipakai diarsipkan, bukan dihapus |
 | **Permintaan** | Tiket dari portal (fasilitas, akses, internet, surat & paket) dengan status, prioritas, dan tanggapan |
-| **Portal Pelanggan** | Beranda, kontrak, booking ruang mandiri dengan cek ketersediaan, tagihan + instruksi transfer, cetak invoice, kirim permintaan bantuan |
+| **Portal Pelanggan** | Beranda, kontrak, booking ruang mandiri dengan cek ketersediaan, tagihan + instruksi transfer, **konfirmasi pembayaran** (upload nomor referensi, tunggu verifikasi), cetak invoice, kirim permintaan bantuan |
+| **Aplikasi Pelanggan (publik)** | Halaman `/o/{slug}` yang bisa dibuka siapa saja tanpa login: katalog ruang + harga per jam, daftar harga semua layanan, cek jam kosong, **daftar akun sendiri lalu booking langsung**, form ajukan sewa kantor yang masuk ke CRM sebagai lead, tombol WhatsApp. Mobile-first & bisa dipasang di layar utama HP (PWA) |
+| **Verifikasi pembayaran** | Tab *Konfirmasi pelanggan* di menu Tagihan: tim menerima (otomatis tercatat sebagai pembayaran) atau menolak dengan catatan |
 | **Pengaturan** | Profil usaha (kop invoice), PPN, termin bayar, prefix nomor, rekening bank, tim & role, ganti kata sandi |
 | **Log Aktivitas** | Audit trail setiap perubahan: siapa, apa, kapan |
 | **Multi-tenant** | Pendaftaran organisasi baru (`/signup`) dengan katalog standar; data antar organisasi terisolasi |
@@ -109,7 +111,7 @@ Keputusan penting:
 ### Struktur folder
 
 ```
-prisma/schema.prisma        Skema database (18 model)
+prisma/schema.prisma        Skema database (19 model)
 prisma/seed.ts              Seed data contoh ke PostgreSQL
 prisma.config.ts            Konfigurasi Prisma 7 (URL DB, migrasi, seed)
 src/proxy.ts                Proteksi halaman
@@ -123,14 +125,17 @@ src/core/seed/demo.ts       Skenario data contoh
 src/server/                 Prisma repo, sesi, hash kata sandi (khusus server)
 src/client/                 Klien API, hooks, format Rupiah/WIB, sesi UI
 src/ui/                     Komponen UI (tombol, form, modal, toast, grafik)
-src/features/               Halaman per modul
+src/features/               Halaman per modul (termasuk features/public = aplikasi pelanggan)
+public/                     Manifest PWA, ikon, service worker
 demo/                       Entry demo in-browser (hash router + MemoryRepo)
 scripts/                    Pengujian & build demo
 ```
 
 ### Daftar endpoint (ringkas)
 
-Semua di bawah `/api`. Contoh: `GET /dashboard`, `GET|POST /leads`, `POST /leads/:id/stage`, `POST /leads/:id/convert`, `GET|POST /customers`, `POST /customers/:id/portal-users`, `GET /floors/:id/plan`, `POST /contracts/:id/activate|terminate|renew`, `GET /bookings/availability`, `POST /invoices/generate`, `POST /invoices/:id/payments`, `GET /portal/overview`, `POST /portal/bookings`. Daftar lengkap beserta permission: `src/core/api/router.ts`.
+Semua di bawah `/api`. Contoh: `GET /dashboard`, `GET|POST /leads`, `POST /leads/:id/stage`, `POST /leads/:id/convert`, `GET|POST /customers`, `POST /customers/:id/portal-users`, `GET /floors/:id/plan`, `POST /contracts/:id/activate|terminate|renew`, `GET /bookings/availability`, `POST /invoices/generate`, `POST /invoices/:id/payments`, `GET /portal/overview`, `POST /portal/bookings`, `POST /portal/invoices/:id/confirm-payment`, `GET /payment-confirmations`, `POST /payment-confirmations/:id/accept|reject`. Daftar lengkap beserta permission: `src/core/api/router.ts`.
+
+Endpoint **tanpa sesi** (aplikasi pelanggan) dibatasi rate limit per IP: `GET /public/:slug` (katalog, 120×/menit), `GET /public/:slug/availability` (jam terisi saja, tanpa judul booking), `POST /public/:slug/inquiries` (5×/10 menit), `POST /public/:slug/register` (5×/jam). Halaman publik bisa dimatikan lewat Pengaturan → *Aplikasi pelanggan*; jika mati, semua endpoint di atas menjawab 404.
 
 Format error konsisten: `{ "error": { "code": "VALIDATION", "message": "...", "fields": { "email": "format email tidak valid" } } }` dengan status 400/401/403/404/409/422.
 
@@ -139,14 +144,16 @@ Format error konsisten: `{ "error": { "code": "VALIDATION", "message": "...", "f
 ## 4. Pengujian
 
 ```bash
-npm test          # 30 skenario end-to-end logika bisnis + API (tanpa database)
+npm test          # 41 skenario end-to-end logika bisnis + API (tanpa database)
                   # dijalankan 2×: MemoryRepo dan PrismaRepo di atas PrismaClient tiruan
                   # yang memvalidasi setiap query terhadap prisma/schema.prisma
 npx playwright install chromium
-npm run test:e2e  # uji UI di browser: login, CRM, kontrak, pembayaran, booking, portal, mobile, dark mode
+npm run test:e2e  # 28 skenario UI di browser: login, CRM, kontrak, pembayaran, booking,
+                  # portal + konfirmasi bayar, aplikasi pelanggan publik (katalog, ajukan sewa,
+                  # daftar akun & booking), verifikasi oleh admin, mobile 390px, dark mode
 ```
 
-Skenario yang diuji antara lain: RBAC per role, isolasi tenant, bentrok jadwal, kapasitas, aktivasi kontrak (ruang terisi + invoice sewa + deposit + PPN), idempotensi generate tagihan, pembayaran parsial/lebih bayar, void, portal hanya melihat data sendiri, owner terakhir tidak bisa dihapus.
+Skenario yang diuji antara lain: RBAC per role, isolasi tenant, bentrok jadwal, kapasitas, aktivasi kontrak (ruang terisi + invoice sewa + deposit + PPN), idempotensi generate tagihan, pembayaran parsial/lebih bayar, void, portal hanya melihat data sendiri, owner terakhir tidak bisa dihapus, halaman publik mati → 404, ketersediaan publik tidak membocorkan judul booking, rate limit pengajuan, email ganda saat daftar mandiri ditolak, konfirmasi pembayaran (terima → invoice terbayar, tolak → tagihan tidak berubah, tidak bisa diproses dua kali).
 
 ---
 

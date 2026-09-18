@@ -46,7 +46,9 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 - [ ] Kontrak: buat kontrak untuk ruang kosong → *Aktifkan* (invoice pertama terbit otomatis)
 - [ ] Tagihan: buka invoice → *Catat pembayaran*
 - [ ] Booking: buat booking meeting room; coba jam yang bentrok (harus ditolak)
-- [ ] Portal: logout → login `budi@kopikita.id` → booking & kirim permintaan
+- [ ] Portal: logout → login `budi@kopikita.id` → booking, kirim permintaan, dan **Konfirmasi bayar** di salah satu tagihan
+- [ ] Tagihan → tab **Konfirmasi pelanggan**: terima konfirmasi tadi (otomatis tercatat sebagai pembayaran)
+- [ ] Aplikasi pelanggan: logout → buka http://localhost:3000/o/bintaro-works → pilih ruang, daftar akun baru, booking; lalu isi form *Ajukan sewa kantor* dan cek lead-nya muncul di CRM
 
 **3b. Kosongkan data contoh & daftarkan organisasi asli**
 - [ ] Hentikan `npm run dev` (Ctrl+C), lalu:
@@ -66,6 +68,7 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 - [ ] **Kontrak**: masukkan kontrak berjalan → *Aktifkan*
 - [ ] **Tagihan**: tandai pembayaran yang sudah diterima
 - [ ] **Pelanggan → Akses portal**: buat akun portal untuk penyewa yang mau memakainya
+- [ ] **Pengaturan → Aplikasi pelanggan**: nyalakan halaman publik, tulis kalimat promosi (tagline), isi nomor WhatsApp. Alamat halaman publik Anda: `/o/{slug-organisasi}` — bagikan tautan ini di Instagram/Google Maps/WhatsApp. Matikan saklarnya kapan saja jika belum mau dibuka ke umum.
 
 > Data yang diisi di laptop tidak otomatis pindah ke server online. Jika ingin langsung memakai versi online, lakukan 3c **setelah** Tahap 4.
 
@@ -117,6 +120,8 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 | Setiap hari | Staf | Cek Dashboard: booking hari ini, follow-up lead, permintaan baru |
 | Tanggal 1 setiap bulan | Finance | Tagihan → **Generate bulanan** (aman diklik ulang) |
 | Setiap transfer masuk | Finance | Invoice → **Catat pembayaran** |
+| Setiap hari kerja | Finance | Tagihan → tab **Konfirmasi pelanggan**: terima/tolak konfirmasi transfer dari pelanggan |
+| Setiap hari kerja | Staf | CRM: lead baru bersumber *Website* datang dari halaman publik — hubungi maksimal 1 hari kerja |
 | Setiap minggu | Owner | Cek tagihan lewat jatuh tempo & kontrak segera berakhir |
 | Setiap bulan | Owner | Cek Log Aktivitas & daftar anggota tim |
 
@@ -129,4 +134,6 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 | `DATABASE_URL belum diatur` | File `.env` belum ada — jalankan ulang skrip setup |
 | `Can't reach database server` | Database belum menyala — `docker compose up -d` |
 | Build Vercel gagal di `prisma migrate deploy` | `DATABASE_URL` salah/kurang `?sslmode=require` untuk Neon |
+| Halaman `/o/...` menampilkan "tidak tersedia" | Halaman publik dimatikan di Pengaturan → *Aplikasi pelanggan*, atau slug organisasi salah |
+| Pelanggan gagal daftar: "Email ini sudah terdaftar" | Email tersebut sudah punya akun — minta pelanggan **Masuk** dulu lewat tombol di kanan atas, baru booking |
 | Login berhasil tapi kembali ke halaman login | Di laptop (`http://`) `COOKIE_SECURE` harus `false`; di server online (`https://`) boleh `true` |

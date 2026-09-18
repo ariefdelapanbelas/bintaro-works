@@ -73,6 +73,9 @@ export async function seedDemo(db: GlobalRepo, hasher: PasswordHasher, realNow: 
     bankName: "BCA",
     bankAccountNo: "527 088 1990",
     bankAccountName: "PT Bintaro Works Indonesia",
+    whatsapp: "6281287009900",
+    publicEnabled: true,
+    publicTagline: "Kantor siap pakai, ruang meeting, dan studio di jantung Bintaro — sewa harian sampai tahunan.",
   });
 
   // ---- Tim
@@ -429,6 +432,24 @@ export async function seedDemo(db: GlobalRepo, hasher: PasswordHasher, realNow: 
     } catch {
       /* bentrok → lewati */
     }
+  }
+
+  // Konfirmasi pembayaran dari pelanggan portal yang menunggu verifikasi finance
+  const kopikitaOpen = (await repo.invoice.list({ where: { customerId: cust.kopikita.id, status: ["SENT", "OVERDUE", "PARTIAL"] }, orderBy: { field: "issueDate", dir: "desc" } }))[0];
+  if (kopikitaOpen) {
+    await repo.paymentConfirmation.create({
+      invoiceId: kopikitaOpen.id,
+      amount: kopikitaOpen.total - kopikitaOpen.amountPaid,
+      method: "TRANSFER",
+      paidAt: addDays(today, -1),
+      reference: "BCA/TRX/99182736",
+      note: "Sudah transfer kemarin sore dari rekening perusahaan.",
+      status: "PENDING",
+      reviewedById: null,
+      reviewNote: null,
+      paymentId: null,
+      createdById: kopikitaMembership?.userId ?? null,
+    });
   }
 
   // Segarkan status (overdue, kontrak berakhir)

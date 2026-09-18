@@ -135,5 +135,28 @@ await check("logout", async () => {
   expect(r.status === 200, `status ${r.status}`);
 });
 
+// ---- Aplikasi pelanggan (publik) — harus bisa dibuka tanpa sesi
+cookie = "";
+const SLUG = process.env.SMOKE_SLUG ?? "bintaro-works";
+await check(`GET /api/public/${SLUG} (katalog publik)`, async () => {
+  const r = await call("GET", `/api/public/${SLUG}`);
+  expect(r.status === 200 && r.data.organization?.name, `status ${r.status}: ${JSON.stringify(r.data).slice(0, 160)}`);
+  expect(Array.isArray(r.data.rooms) && Array.isArray(r.data.products), "rooms/products tidak ada");
+  expect(r.data.organization.id === undefined, "data internal organisasi bocor");
+  console.log(`      ${r.data.rooms.length} ruang · ${r.data.products.length} layanan`);
+});
+await check("slug publik tidak dikenal → 404", async () => {
+  const r = await call("GET", "/api/public/slug-yang-tidak-ada");
+  expect(r.status === 404, `status ${r.status}`);
+});
+await check(`halaman /o/${SLUG} tampil tanpa login`, async () => {
+  const r = await call("GET", `/o/${SLUG}`);
+  expect(r.status === 200, `status ${r.status} (harus tidak dialihkan ke /login)`);
+});
+await check("manifest PWA tersedia", async () => {
+  const r = await call("GET", "/manifest.webmanifest");
+  expect(r.status === 200 && (r.data.name || String(r.data).includes("Bintaro")), `status ${r.status}`);
+});
+
 console.log(failures ? `\n${failures} pemeriksaan GAGAL` : "\nSemua pemeriksaan lulus ✔");
 process.exit(failures ? 1 : 0);

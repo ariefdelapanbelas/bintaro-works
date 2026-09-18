@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
 import { LuArrowLeft, LuCalendarDays, LuHouse, LuLifeBuoy, LuLogOut, LuPrinter, LuReceipt, LuUsers } from "react-icons/lu";
-import type { Booking, Contract, Invoice, ServiceRequest, Space } from "@/core/domain/types";
+import type { Booking, Contract, Invoice, PaymentConfirmation, PaymentMethod, ServiceRequest, Space } from "@/core/domain/types";
 import { api } from "@/client/api";
-import { BILLING_CYCLE, BOOKING_STATUS, CONTRACT_STATUS, date, dateTime, dayLabel, INVOICE_STATUS, PRIORITY, REQUEST_STATUS, rupiah, SPACE_TYPE_LABEL, time, todayISO, wibToISO } from "@/client/format";
+import { BILLING_CYCLE, BOOKING_STATUS, CONFIRMATION_STATUS, CONTRACT_STATUS, date, dateTime, dayLabel, INVOICE_STATUS, PAYMENT_METHOD, PRIORITY, REQUEST_STATUS, rupiah, SPACE_TYPE_LABEL, time, todayISO, wibToISO } from "@/client/format";
 import { useApi, useMutation } from "@/client/hooks";
 import { Link, useNav } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { ConfirmDialog, Modal, useToast } from "@/ui/overlay";
-import { Avatar, Badge, Button, Card, cn, Empty, ErrorBox, Field, Input, PageHeader, Select, Spinner, StatusBadge, Textarea } from "@/ui/primitives";
+import { Avatar, Badge, Button, Card, cn, Empty, ErrorBox, Field, Input, MoneyInput, PageHeader, Select, Spinner, StatusBadge, Textarea } from "@/ui/primitives";
 import { InvoiceSheet, type InvoiceDetail } from "../billing/BillingPages";
 import { AvailabilityStrip, TIME_OPTIONS } from "../bookings/BookingsPage";
 import { Logo, ThemeToggle } from "../shell/AppShell";
@@ -18,7 +18,7 @@ interface Overview {
   organization: { name: string; phone: string | null; email: string | null; address: string | null; bankName: string | null; bankAccountNo: string | null; bankAccountName: string | null };
   stats: { outstanding: number; openInvoices: number; activeContracts: number; upcomingBookings: number; openRequests: number };
   contracts: (Pick<Contract, "id" | "number" | "title" | "status" | "startDate" | "endDate" | "monthlyFee" | "billingCycle"> & { spaceName: string | null; daysLeft: number })[];
-  invoices: (Invoice & { outstanding: number })[];
+  invoices: (Invoice & { outstanding: number; confirmation: PaymentConfirmation | null })[];
   bookings: (Booking & { spaceName: string })[];
   requests: ServiceRequest[];
 }
@@ -325,6 +325,7 @@ export function PortalBookingsPage() {
 export function PortalInvoicesPage() {
   const { push } = useNav();
   const { data, error, reload } = useApi<Overview>("/portal/overview");
+  const [confirming, setConfirming] = useState<Overview["invoices"][number] | null>(null);
   if (error) return <ErrorBox error={error} onRetry={reload} />;
   if (!data) return <Spinner />;
   const o = data.organization;
@@ -354,6 +355,7 @@ export function PortalInvoicesPage() {
                   <th>Jatuh tempo</th>
                   <th className="text-right">Total</th>
                   <th>Status</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -366,6 +368,26 @@ export function PortalInvoicesPage() {
                     <td>
                       <StatusBadge map={INVOICE_STATUS} value={i.status} />
                     </td>
+                    <td className="text-right">
+                      {i.outstanding > 0 && i.status !== "VOID" ? (
+                        i.confirmation?.status === "PENDING" ? (
+                          <Badge tone="warn">Menunggu verifikasi</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirming(i);
+                            }}
+                          >
+                            Konfirmasi bayar
+                          </Button>
+                        )
+                      ) : i.confirmation?.status === "REJECTED" ? (
+                        <Badge tone="bad">Konfirmasi ditolak</Badge>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -373,7 +395,77 @@ export function PortalInvoicesPage() {
           </div>
         )}
       </div>
+      <ConfirmPaymentModal invoice={confirming} onClose={() => setConfirming(null)} />
     </div>
+  );
+}
+
+/** Pelanggan mengonfirmasi transfer; finance memverifikasi sebelum tercatat sebagai pembayaran. */
+function ConfirmPaymentModal({ invoice, onClose }: { invoice: (Invoice & { outstanding: number }) | null; onClose: () => void }) {
+  const toast = useToast();
+  const [v, setV] = useState<{ amount: number | ""; method: PaymentMethod; paidAt: string; reference: string; note: string }>({ amount: "", method: "TRANSFER", paidAt: todayISO(), reference: "", note: "" });
+  useEffect(() => {
+    if (invoice) setV({ amount: invoice.outstanding, method: "TRANSFER", paidAt: todayISO(), reference: "", note: "" });
+  }, [invoice?.id]);
+  const m = useMutation(() =>
+    api.post(`/portal/invoices/${invoice?.id}/confirm-payment`, {
+      amount: v.amount || 0,
+      method: v.method,
+      paidAt: new Date(`${v.paidAt}T12:00:00+07:00`).toISOString(),
+      reference: v.reference || null,
+      note: v.note || null,
+    }),
+  );
+  const f = m.error?.fields ?? {};
+  return (
+    <Modal
+      open={!!invoice}
+      onClose={onClose}
+      size="sm"
+      title="Konfirmasi pembayaran"
+      description={invoice ? `${invoice.number} · sisa ${rupiah(invoice.outstanding)}` : undefined}
+      footer={
+        <>
+          <Button onClick={onClose}>Batal</Button>
+          <Button
+            variant="primary"
+            loading={m.pending}
+            onClick={async () => {
+              try {
+                await m.run();
+                toast.success("Terima kasih — konfirmasi Anda sedang diverifikasi tim kami");
+                onClose();
+              } catch {
+                /* ditampilkan di form */
+              }
+            }}
+          >
+            Kirim konfirmasi
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {m.error && !m.error.fields && <ErrorBox error={m.error} />}
+        <Field label="Jumlah yang ditransfer" htmlFor="cf-amount" error={f.amount}>
+          <MoneyInput id="cf-amount" value={v.amount} onChange={(x) => setV({ ...v, amount: x })} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Metode" htmlFor="cf-method">
+            <Select id="cf-method" value={v.method} onChange={(e) => setV({ ...v, method: e.target.value as PaymentMethod })} options={(["TRANSFER", "QRIS", "VIRTUAL_ACCOUNT", "CASH"] as PaymentMethod[]).map((x) => ({ value: x, label: PAYMENT_METHOD[x] }))} />
+          </Field>
+          <Field label="Tanggal transfer" htmlFor="cf-date" error={f.paidAt}>
+            <Input id="cf-date" type="date" value={v.paidAt} onChange={(e) => setV({ ...v, paidAt: e.target.value })} />
+          </Field>
+        </div>
+        <Field label="No. referensi / berita transfer" htmlFor="cf-ref" hint="Membantu tim kami mencocokkan mutasi bank">
+          <Input id="cf-ref" className="font-mono" value={v.reference} onChange={(e) => setV({ ...v, reference: e.target.value })} />
+        </Field>
+        <Field label="Catatan (opsional)" htmlFor="cf-note">
+          <Textarea id="cf-note" rows={2} value={v.note} onChange={(e) => setV({ ...v, note: e.target.value })} />
+        </Field>
+      </div>
+    </Modal>
   );
 }
 

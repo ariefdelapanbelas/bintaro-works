@@ -59,6 +59,9 @@ export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 export const PAYMENT_METHODS = ["TRANSFER", "QRIS", "VIRTUAL_ACCOUNT", "CASH", "CARD"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+export const CONFIRMATION_STATUSES = ["PENDING", "ACCEPTED", "REJECTED"] as const;
+export type ConfirmationStatus = (typeof CONFIRMATION_STATUSES)[number];
+
 export const REQUEST_STATUSES = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"] as const;
 export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 export const REQUEST_PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
@@ -84,6 +87,9 @@ export interface Organization extends Timestamps {
   bankName: string | null;
   bankAccountNo: string | null;
   bankAccountName: string | null;
+  whatsapp: string | null;
+  publicEnabled: boolean;
+  publicTagline: string | null;
 }
 
 export interface User extends Timestamps {
@@ -279,6 +285,22 @@ export interface Payment {
   createdAt: Date;
 }
 
+export interface PaymentConfirmation extends Timestamps {
+  id: string;
+  organizationId: string;
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: Date;
+  reference: string | null;
+  note: string | null;
+  status: ConfirmationStatus;
+  reviewedById: string | null;
+  reviewNote: string | null;
+  paymentId: string | null;
+  createdById: string | null;
+}
+
 export interface ServiceRequest extends Timestamps {
   id: string;
   organizationId: string;
@@ -318,6 +340,7 @@ export interface ScopedEntities {
   invoice: Invoice;
   invoiceItem: InvoiceItem;
   payment: Payment;
+  paymentConfirmation: PaymentConfirmation;
   serviceRequest: ServiceRequest;
   auditLog: AuditLog;
   membership: Membership;

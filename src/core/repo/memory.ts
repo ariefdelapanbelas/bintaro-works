@@ -24,6 +24,7 @@ export const SCOPED_TABLES: ScopedTable[] = [
   "invoice",
   "invoiceItem",
   "payment",
+  "paymentConfirmation",
   "serviceRequest",
   "auditLog",
   "membership",
@@ -108,6 +109,11 @@ export class MemoryRepo implements GlobalRepo {
     return o ? clone(o) : null;
   }
 
+  async findOrganizationBySlug(slug: string) {
+    const o = this.data.organizations.find((x) => x.slug === slug.toLowerCase());
+    return o ? clone(o) : null;
+  }
+
   async createOrganization(input: Pick<Organization, "name" | "slug"> & Partial<Organization>) {
     if (this.data.organizations.some((o) => o.slug === input.slug)) throw new Error("UNIQUE_VIOLATION:slug");
     const t = this.now();
@@ -124,6 +130,9 @@ export class MemoryRepo implements GlobalRepo {
       bankName: null,
       bankAccountNo: null,
       bankAccountName: null,
+      whatsapp: null,
+      publicEnabled: true,
+      publicTagline: null,
       ...input,
       createdAt: t,
       updatedAt: t,

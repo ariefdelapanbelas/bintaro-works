@@ -120,6 +120,9 @@ export class PrismaRepo implements GlobalRepo {
   getOrganization(id: string) {
     return this.prisma.organization.findUnique({ where: { id } }) as Promise<Organization | null>;
   }
+  findOrganizationBySlug(slug: string) {
+    return this.prisma.organization.findUnique({ where: { slug: slug.toLowerCase() } }) as Promise<Organization | null>;
+  }
   createOrganization(data: Pick<Organization, "name" | "slug"> & Partial<Organization>) {
     return this.prisma.organization.create({ data: stripUndefined(data) as any }) as Promise<Organization>;
   }

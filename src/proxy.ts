@@ -5,9 +5,12 @@ import { SESSION_COOKIE, verifySession } from "@/server/session";
 // Proxy hanya mengarahkan halaman; otorisasi sebenarnya tetap dicek di API router.
 
 const PUBLIC_PATHS = ["/login", "/signup"];
+// Aplikasi pelanggan (publik) — bebas diakses, dengan atau tanpa sesi.
+const OPEN_PATHS = ["/o"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (OPEN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 

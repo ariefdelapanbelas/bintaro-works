@@ -52,6 +52,8 @@ export interface GlobalRepo {
   updateUser(id: string, data: Partial<Pick<User, "name" | "passwordHash" | "phone" | "isActive" | "lastLoginAt">>): Promise<User>;
   membershipsOfUser(userId: string): Promise<ScopedEntities["membership"][]>;
   getOrganization(id: string): Promise<Organization | null>;
+  /** Dipakai halaman publik: cari organisasi berdasarkan slug. */
+  findOrganizationBySlug(slug: string): Promise<Organization | null>;
   createOrganization(data: Pick<Organization, "name" | "slug"> & Partial<Omit<Organization, "id" | "createdAt" | "updatedAt">>): Promise<Organization>;
   /** Repository ter-scope untuk satu organisasi. */
   forOrg(organizationId: string): OrgRepo;

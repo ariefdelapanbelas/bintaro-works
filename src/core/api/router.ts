@@ -14,6 +14,8 @@ import * as crm from "../services/crm";
 import * as customers from "../services/customers";
 import * as dash from "../services/dashboard";
 import * as portal from "../services/portal";
+import * as publicSite from "../services/public";
+import { rateLimit } from "./rate-limit";
 import * as settings from "../services/settings";
 import * as spaces from "../services/spaces";
 
@@ -25,6 +27,8 @@ export interface ApiRequest {
   query: Record<string, string>;
   body: unknown;
   session: auth.SessionPayload | null;
+  /** IP pemanggil (untuk rate limit endpoint publik). */
+  ip?: string;
 }
 
 export interface ApiResponse {
@@ -140,6 +144,9 @@ route("POST", "/invoices/:id/send", "billing.manage", ({ s, params }) => billing
 route("POST", "/invoices/:id/void", "billing.manage", ({ s, params }) => billing.voidInvoice(s, params.id));
 route("POST", "/invoices/:id/payments", "billing.manage", ({ s, params, body }) => billing.recordPayment(s, params.id, body));
 route("GET", "/payments", "billing.view", ({ s }) => billing.listPayments(s));
+route("GET", "/payment-confirmations", "billing.view", ({ s, query }) => billing.listPaymentConfirmations(s, query));
+route("POST", "/payment-confirmations/:id/accept", "billing.manage", ({ s, params, body }) => billing.acceptPaymentConfirmation(s, params.id, body));
+route("POST", "/payment-confirmations/:id/reject", "billing.manage", ({ s, params, body }) => billing.rejectPaymentConfirmation(s, params.id, body));
 route("DELETE", "/payments/:id", "billing.manage", ({ s, params }) => billing.deletePayment(s, params.id));
 
 // ---- Permintaan layanan
@@ -163,6 +170,7 @@ route("GET", "/portal/availability", "portal.access", ({ s, query }) => portal.p
 route("POST", "/portal/bookings", "portal.access", ({ s, body }) => portal.portalCreateBooking(s, body));
 route("POST", "/portal/bookings/:id/cancel", "portal.access", ({ s, params }) => portal.portalCancelBooking(s, params.id));
 route("POST", "/portal/requests", "portal.access", ({ s, body }) => portal.portalCreateRequest(s, body));
+route("POST", "/portal/invoices/:id/confirm-payment", "portal.access", ({ s, params, body }) => portal.portalConfirmPayment(s, params.id, body));
 
 function mapUnknownError(e: unknown): AppError | null {
   const err = e as { code?: string; message?: string };
@@ -193,6 +201,29 @@ export async function handleApi(deps: Deps, req: ApiRequest, onUnexpected?: (e: 
     if (req.method === "POST" && req.path === "/auth/logout") {
       return { status: 200, body: { ok: true }, setSession: null };
     }
+    // ---- Aplikasi pelanggan (publik, tanpa sesi) — dibatasi rate limit per IP
+    const pub = /^\/public\/([^/]+)(\/[a-z-]+)?$/.exec(req.path);
+    if (pub) {
+      const slug = decodeURIComponent(pub[1]);
+      const sub = pub[2] ?? "";
+      const ip = req.ip ?? "anon";
+      if (req.method === "GET" && (sub === "" || sub === "/availability")) {
+        if (!rateLimit(`pub:${ip}`, 120, 60_000)) throw new AppError("CONFLICT", "Terlalu banyak permintaan. Coba lagi sebentar lagi.");
+        const body = sub === "" ? await publicSite.publicInfo(deps, slug) : await publicSite.publicAvailability(deps, slug, req.query.spaceId ?? "", req.query.date ?? "");
+        return { status: 200, body };
+      }
+      if (req.method === "POST" && sub === "/inquiries") {
+        if (!rateLimit(`inq:${ip}`, 5, 10 * 60_000)) throw new AppError("CONFLICT", "Permintaan Anda sudah kami terima. Mohon tunggu balasan tim kami.");
+        return { status: 201, body: await publicSite.publicInquiry(deps, slug, req.body) };
+      }
+      if (req.method === "POST" && sub === "/register") {
+        if (!rateLimit(`reg:${ip}`, 5, 60 * 60_000)) throw new AppError("CONFLICT", "Terlalu banyak percobaan pendaftaran dari perangkat ini.");
+        const r = await publicSite.publicRegister(deps, slug, req.body);
+        return { status: 201, body: { ok: true, customerId: r.customerId, redirectTo: "/portal" }, setSession: r.session };
+      }
+      return { status: 404, body: { error: { code: "NOT_FOUND", message: "Endpoint tidak ditemukan" } } };
+    }
+
     if (req.method === "GET" && req.path === "/health") {
       return { status: 200, body: { ok: true, time: deps.now().toISOString() } };
     }
