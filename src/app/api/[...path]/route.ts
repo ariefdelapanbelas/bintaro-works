@@ -32,7 +32,7 @@ async function handle(req: NextRequest, ctx: Ctx, method: Method) {
 
   const session = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   const result = await handleApi(
-    getDeps(),
+    await getDeps(),
     {
       method,
       path: "/" + path.map(encodeURIComponent).join("/"),

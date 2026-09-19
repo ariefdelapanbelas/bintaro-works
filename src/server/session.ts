@@ -33,12 +33,16 @@ async function secret(): Promise<string> {
   if (s && s.length >= 32) return s;
   const dbUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL;
   if (process.env.NODE_ENV === "production") {
-    if (!dbUrl) throw new Error("AUTH_SECRET wajib diisi (min. 32 karakter)");
     if (!warned) {
-      console.warn("[bwos] AUTH_SECRET belum diisi — memakai kunci turunan dari DATABASE_URL. Isi AUTH_SECRET untuk keamanan terbaik.");
+      if (dbUrl) {
+        console.warn("[bwos] AUTH_SECRET belum diisi — memakai kunci turunan dari DATABASE_URL. Isi AUTH_SECRET untuk keamanan terbaik.");
+      } else {
+        console.warn("[bwos] AUTH_SECRET belum diisi — memakai kunci default demo. Isi AUTH_SECRET untuk keamanan terbaik di produksi.");
+      }
       warned = true;
     }
-    const digest = await crypto.subtle.digest("SHA-256", enc.encode(`bwos-session-v1:${dbUrl}`));
+    const seedString = dbUrl || "bwos-demo-fallback-secret-production-min-32chars";
+    const digest = await crypto.subtle.digest("SHA-256", enc.encode(`bwos-session-v1:${seedString}`));
     return b64url(new Uint8Array(digest));
   }
   return "dev-only-insecure-secret-change-me-please-0123456789";

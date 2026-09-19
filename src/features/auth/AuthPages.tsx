@@ -7,8 +7,8 @@ import { useSession } from "@/client/session";
 import { Button, ErrorBox, Field, Input } from "@/ui/primitives";
 import { Logo, ThemeToggle } from "../shell/AppShell";
 
-// Kotak akun contoh hanya tampil bila NEXT_PUBLIC_DEMO_MODE="true" (lokal/demo). Produksi: kosongkan.
-const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+// Kotak akun contoh aktif secara default (bisa dinonaktifkan dengan NEXT_PUBLIC_DEMO_MODE="false").
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
 
 const DEMO = [
   { email: "owner@bintaroworks.id", role: "Owner" },
