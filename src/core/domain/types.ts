@@ -4,6 +4,9 @@
 export const ROLES = ["OWNER", "ADMIN", "STAFF", "FINANCE", "CUSTOMER"] as const;
 export type Role = (typeof ROLES)[number];
 
+export const SOCIAL_PROVIDERS = ["GOOGLE", "FACEBOOK", "TIKTOK"] as const;
+export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
+
 export const SPACE_TYPES = [
   "PRIVATE_OFFICE",
   "COWORKING_DESK",
@@ -97,8 +100,22 @@ export interface User extends Timestamps {
   email: string;
   name: string;
   passwordHash: string;
+  /** false = akun dibuat lewat login sosial, belum menyetel kata sandi sendiri. */
+  passwordSet: boolean;
   phone: string | null;
   isActive: boolean;
+  lastLoginAt: Date | null;
+}
+
+/** Akun Google/Facebook/TikTok yang tertaut ke satu user. */
+export interface SocialAccount extends Timestamps {
+  id: string;
+  userId: string;
+  provider: SocialProvider;
+  providerUserId: string;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
   lastLoginAt: Date | null;
 }
 

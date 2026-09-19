@@ -23,6 +23,7 @@ import { Link, useNav } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { Modal, useToast } from "@/ui/overlay";
 import { Badge, Button, ErrorBox, Field, Input, Select, Spinner, Textarea } from "@/ui/primitives";
+import { SocialButtons } from "../auth/SocialButtons";
 import { AvailabilityStrip, TIME_OPTIONS } from "../bookings/BookingsPage";
 import { ThemeToggle } from "../shell/AppShell";
 
@@ -121,12 +122,13 @@ function BookingSheet({ slug, info, room, onClose }: { slug: string; info: Publi
   const tax = Math.round((cost * info.organization.taxRate) / 100);
   const isCustomer = me?.role === "CUSTOMER";
 
-  const book = async () => {
+  /** `alreadySignedIn` dipakai setelah daftar lewat akun sosial (sesi sudah aktif). */
+  const book = async (alreadySignedIn = false) => {
     if (!room) return;
     setPending(true);
     setError(null);
     try {
-      if (!isCustomer) {
+      if (!isCustomer && !alreadySignedIn) {
         await api.post(`/public/${slug}/register`, acc);
         await refresh();
       }
@@ -167,11 +169,11 @@ function BookingSheet({ slug, info, room, onClose }: { slug: string; info: Publi
           <>
             <Button onClick={onClose}>Batal</Button>
             {step === "waktu" ? (
-              <Button variant="primary" onClick={() => (isCustomer ? book() : setStep("akun"))} loading={pending} disabled={hours <= 0}>
+              <Button variant="primary" onClick={() => (isCustomer ? void book() : setStep("akun"))} loading={pending} disabled={hours <= 0}>
                 {isCustomer ? "Booking sekarang" : "Lanjutkan"} <LuArrowRight className="h-4 w-4" />
               </Button>
             ) : (
-              <Button variant="primary" onClick={book} loading={pending}>
+              <Button variant="primary" onClick={() => void book()} loading={pending}>
                 Daftar & booking
               </Button>
             )}
@@ -255,6 +257,8 @@ function BookingSheet({ slug, info, room, onClose }: { slug: string; info: Publi
               <Input id="ac-password" type="password" value={acc.password} onChange={(e) => setAcc({ ...acc, password: e.target.value })} />
             </Field>
           </div>
+          {/* Daftar cepat: setelah akun jadi, booking langsung dilanjutkan. */}
+          <SocialButtons orgSlug={slug} next={`/o/${slug}`} label="atau daftar cepat dengan" redirectAfter={false} onDone={() => void book(true)} />
           <p className="text-[12.5px] text-faint">
             Sudah punya akun?{" "}
             <Link href="/login" className="font-semibold text-accent hover:underline">

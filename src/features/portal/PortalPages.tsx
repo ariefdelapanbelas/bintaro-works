@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, type ReactNode } from "react";
-import { LuArrowLeft, LuCalendarDays, LuHouse, LuLifeBuoy, LuLogOut, LuPrinter, LuReceipt, LuUsers } from "react-icons/lu";
+import { LuArrowLeft, LuCalendarDays, LuHouse, LuLifeBuoy, LuLogOut, LuPrinter, LuReceipt, LuUserRound, LuUsers } from "react-icons/lu";
 import type { Booking, Contract, Invoice, PaymentConfirmation, PaymentMethod, ServiceRequest, Space } from "@/core/domain/types";
 import { api } from "@/client/api";
 import { BILLING_CYCLE, BOOKING_STATUS, CONFIRMATION_STATUS, CONTRACT_STATUS, date, dateTime, dayLabel, INVOICE_STATUS, PAYMENT_METHOD, PRIORITY, REQUEST_STATUS, rupiah, SPACE_TYPE_LABEL, time, todayISO, wibToISO } from "@/client/format";
@@ -28,6 +28,7 @@ const PORTAL_NAV = [
   { href: "/portal/bookings", label: "Booking ruang", icon: <LuCalendarDays /> },
   { href: "/portal/invoices", label: "Tagihan", icon: <LuReceipt /> },
   { href: "/portal/requests", label: "Bantuan", icon: <LuLifeBuoy /> },
+  { href: "/portal/akun", label: "Akun", icon: <LuUserRound /> },
 ];
 
 export function PortalShell({ children }: { children: ReactNode }) {
@@ -70,7 +71,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 pb-24 pt-6 sm:px-6 md:pb-12">{children}</main>
-      <nav className="no-print fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-surface md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }} aria-label="Portal (mobile)">
+      <nav className="no-print fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-surface md:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }} aria-label="Portal (mobile)">
         {PORTAL_NAV.map((n) => {
           const active = n.href === "/portal" ? pathname === "/portal" : pathname.startsWith(n.href);
           return (
@@ -409,7 +410,8 @@ function ConfirmPaymentModal({ invoice, onClose }: { invoice: (Invoice & { outst
   }, [invoice?.id]);
   const m = useMutation(() =>
     api.post(`/portal/invoices/${invoice?.id}/confirm-payment`, {
-      amount: v.amount || 0,
+      // kosong = bayar penuh sisa tagihan
+      amount: v.amount === "" ? (invoice?.outstanding ?? 0) : v.amount,
       method: v.method,
       paidAt: new Date(`${v.paidAt}T12:00:00+07:00`).toISOString(),
       reference: v.reference || null,

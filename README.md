@@ -24,6 +24,7 @@ Business operating system multi-tenant untuk operator **workspace & business ser
 | **Verifikasi pembayaran** | Tab *Konfirmasi pelanggan* di menu Tagihan: tim menerima (otomatis tercatat sebagai pembayaran) atau menolak dengan catatan |
 | **Pengaturan** | Profil usaha (kop invoice), PPN, termin bayar, prefix nomor, rekening bank, tim & role, ganti kata sandi |
 | **Log Aktivitas** | Audit trail setiap perubahan: siapa, apa, kapan |
+| **Login akun sosial** | Pelanggan bisa masuk/daftar dengan **Google, Facebook, atau TikTok** — tanpa library pihak ketiga. Email terverifikasi otomatis disatukan dengan akun lama; menu *Akun saya* di portal untuk menautkan/melepas penyedia dan menyetel kata sandi cadangan. Tim internal tetap wajib email + kata sandi |
 | **Multi-tenant** | Pendaftaran organisasi baru (`/signup`) dengan katalog standar; data antar organisasi terisolasi |
 
 Semua teks antarmuka berbahasa Indonesia, nominal Rupiah, waktu WIB. Tersedia tema terang/gelap dan tampilan mobile.
@@ -111,7 +112,7 @@ Keputusan penting:
 ### Struktur folder
 
 ```
-prisma/schema.prisma        Skema database (19 model)
+prisma/schema.prisma        Skema database (20 model)
 prisma/seed.ts              Seed data contoh ke PostgreSQL
 prisma.config.ts            Konfigurasi Prisma 7 (URL DB, migrasi, seed)
 src/proxy.ts                Proteksi halaman
@@ -122,7 +123,7 @@ src/core/services/          Logika bisnis per modul
 src/core/api/router.ts      Tabel rute API + RBAC
 src/core/repo/              Kontrak repository + implementasi in-memory
 src/core/seed/demo.ts       Skenario data contoh
-src/server/                 Prisma repo, sesi, hash kata sandi (khusus server)
+src/server/                 Prisma repo, sesi, hash kata sandi, gateway OAuth (khusus server)
 src/client/                 Klien API, hooks, format Rupiah/WIB, sesi UI
 src/ui/                     Komponen UI (tombol, form, modal, toast, grafik)
 src/features/               Halaman per modul (termasuk features/public = aplikasi pelanggan)
@@ -135,6 +136,9 @@ scripts/                    Pengujian & build demo
 
 Semua di bawah `/api`. Contoh: `GET /dashboard`, `GET|POST /leads`, `POST /leads/:id/stage`, `POST /leads/:id/convert`, `GET|POST /customers`, `POST /customers/:id/portal-users`, `GET /floors/:id/plan`, `POST /contracts/:id/activate|terminate|renew`, `GET /bookings/availability`, `POST /invoices/generate`, `POST /invoices/:id/payments`, `GET /portal/overview`, `POST /portal/bookings`, `POST /portal/invoices/:id/confirm-payment`, `GET /payment-confirmations`, `POST /payment-confirmations/:id/accept|reject`. Daftar lengkap beserta permission: `src/core/api/router.ts`.
 
+**Login akun sosial** (alur OAuth 2.0 authorization code, ditulis tanpa library):
+`GET /api/auth/oauth/{google|facebook|tiktok}` mulai (menyimpan state anti-CSRF + PKCE di cookie bertanda tangan, 10 menit) → penyedia → `GET /api/auth/oauth/{penyedia}/callback` tukar token, ambil profil, tautkan/buat akun, pasang cookie sesi. Untuk klien non-browser tersedia `POST /auth/oauth/{penyedia}/callback`. Akun tertaut: `GET /auth/social-accounts`, `POST /auth/social-accounts/{penyedia}`, `DELETE /auth/social-accounts/{id}`, `POST /auth/password/set`.
+
 Endpoint **tanpa sesi** (aplikasi pelanggan) dibatasi rate limit per IP: `GET /public/:slug` (katalog, 120×/menit), `GET /public/:slug/availability` (jam terisi saja, tanpa judul booking), `POST /public/:slug/inquiries` (5×/10 menit), `POST /public/:slug/register` (5×/jam). Halaman publik bisa dimatikan lewat Pengaturan → *Aplikasi pelanggan*; jika mati, semua endpoint di atas menjawab 404.
 
 Format error konsisten: `{ "error": { "code": "VALIDATION", "message": "...", "fields": { "email": "format email tidak valid" } } }` dengan status 400/401/403/404/409/422.
@@ -144,16 +148,17 @@ Format error konsisten: `{ "error": { "code": "VALIDATION", "message": "...", "f
 ## 4. Pengujian
 
 ```bash
-npm test          # 41 skenario end-to-end logika bisnis + API (tanpa database)
+npm test          # 54 skenario end-to-end logika bisnis + API (tanpa database)
                   # dijalankan 2×: MemoryRepo dan PrismaRepo di atas PrismaClient tiruan
                   # yang memvalidasi setiap query terhadap prisma/schema.prisma
 npx playwright install chromium
-npm run test:e2e  # 28 skenario UI di browser: login, CRM, kontrak, pembayaran, booking,
-                  # portal + konfirmasi bayar, aplikasi pelanggan publik (katalog, ajukan sewa,
-                  # daftar akun & booking), verifikasi oleh admin, mobile 390px, dark mode
+npm run test:e2e  # 32 skenario UI di browser: login (termasuk login sosial), CRM, kontrak,
+                  # pembayaran, booking, portal + konfirmasi bayar, aplikasi pelanggan publik
+                  # (katalog, ajukan sewa, daftar akun & booking), Akun saya (tautkan TikTok,
+                  # setel kata sandi), verifikasi oleh admin, mobile 390px, dark mode
 ```
 
-Skenario yang diuji antara lain: RBAC per role, isolasi tenant, bentrok jadwal, kapasitas, aktivasi kontrak (ruang terisi + invoice sewa + deposit + PPN), idempotensi generate tagihan, pembayaran parsial/lebih bayar, void, portal hanya melihat data sendiri, owner terakhir tidak bisa dihapus, halaman publik mati → 404, ketersediaan publik tidak membocorkan judul booking, rate limit pengajuan, email ganda saat daftar mandiri ditolak, konfirmasi pembayaran (terima → invoice terbayar, tolak → tagihan tidak berubah, tidak bisa diproses dua kali).
+Skenario yang diuji antara lain: RBAC per role, isolasi tenant, bentrok jadwal, kapasitas, aktivasi kontrak (ruang terisi + invoice sewa + deposit + PPN), idempotensi generate tagihan, pembayaran parsial/lebih bayar, void, portal hanya melihat data sendiri, owner terakhir tidak bisa dihapus, halaman publik mati → 404, ketersediaan publik tidak membocorkan judul booking, rate limit pengajuan, email ganda saat daftar mandiri ditolak, konfirmasi pembayaran (terima → invoice terbayar, tolak → tagihan tidak berubah, tidak bisa diproses dua kali), login sosial (email terverifikasi disatukan, email belum terverifikasi ditolak, akun tim internal ditolak, TikTok tanpa email harus ditautkan dulu, akun orang lain tidak bisa direbut, tautan terakhir tidak bisa dilepas sebelum kata sandi disetel).
 
 ---
 

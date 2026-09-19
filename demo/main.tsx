@@ -17,6 +17,7 @@ import { AppShell } from "@/features/shell/AppShell";
 import { PortalShell } from "@/features/portal/PortalPages";
 import { ToastProvider } from "@/ui/overlay";
 import { Spinner } from "@/ui/primitives";
+import { createDemoSocialGateway } from "./social-demo";
 
 const STORE_KEY = "bwos-demo-v1";
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -46,7 +47,7 @@ const safeStorage = {
 };
 
 const db = new MemoryRepo(emptyData());
-const deps: Deps = { db, hasher: createWebHasher(1000), now: () => new Date() };
+const deps: Deps = { db, hasher: createWebHasher(1000), now: () => new Date(), social: createDemoSocialGateway() };
 let session: SessionPayload | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 

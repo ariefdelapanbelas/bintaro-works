@@ -153,6 +153,27 @@ await check(`halaman /o/${SLUG} tampil tanpa login`, async () => {
   const r = await call("GET", `/o/${SLUG}`);
   expect(r.status === 200, `status ${r.status} (harus tidak dialihkan ke /login)`);
 });
+await check("GET /api/auth/providers (login sosial)", async () => {
+  const r = await call("GET", "/api/auth/providers");
+  expect(r.status === 200 && Array.isArray(r.data.providers), `status ${r.status}: ${JSON.stringify(r.data).slice(0, 160)}`);
+  console.log(r.data.providers.length ? `      aktif: ${r.data.providers.map((p) => p.label).join(", ")}` : "      (belum ada penyedia yang dikonfigurasi)");
+});
+await check("mulai login sosial mengarah ke penyedia (bila dikonfigurasi)", async () => {
+  const enabled = (await call("GET", "/api/auth/providers")).data.providers ?? [];
+  if (!enabled.length) return console.log("      (dilewati: belum ada penyedia)");
+  const p = enabled[0].id.toLowerCase();
+  const res = await fetch(`${BASE}/api/auth/oauth/${p}`, { redirect: "manual" });
+  const loc = res.headers.get("location") ?? "";
+  expect([302, 307, 308].includes(res.status), `status ${res.status}`);
+  expect(/^https:\/\//.test(loc) && !loc.includes("/login?error"), `location ${loc.slice(0, 120)}`);
+  expect((res.headers.get("set-cookie") ?? "").includes("bwos_oauth"), "cookie state OAuth tidak diset");
+});
+await check("callback tanpa state ditolak (anti-CSRF)", async () => {
+  const res = await fetch(`${BASE}/api/auth/oauth/google/callback?code=palsu&state=palsu`, { redirect: "manual" });
+  const loc = res.headers.get("location") ?? "";
+  expect([302, 307, 308].includes(res.status) && loc.includes("error="), `status ${res.status} location ${loc}`);
+  expect(!(res.headers.get("set-cookie") ?? "").includes("bwos_session="), "sesi tidak boleh terbentuk");
+});
 await check("manifest PWA tersedia", async () => {
   const r = await call("GET", "/manifest.webmanifest");
   expect(r.status === 200 && (r.data.name || String(r.data).includes("Bintaro")), `status ${r.status}`);

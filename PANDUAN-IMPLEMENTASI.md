@@ -48,6 +48,7 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 - [ ] Booking: buat booking meeting room; coba jam yang bentrok (harus ditolak)
 - [ ] Portal: logout → login `budi@kopikita.id` → booking, kirim permintaan, dan **Konfirmasi bayar** di salah satu tagihan
 - [ ] Tagihan → tab **Konfirmasi pelanggan**: terima konfirmasi tadi (otomatis tercatat sebagai pembayaran)
+- [ ] Akun saya: Portal → **Akun** → lihat cara masuk yang tertaut (di demo, tombol penyedia memunculkan layar izin simulasi)
 - [ ] Aplikasi pelanggan: logout → buka http://localhost:3000/o/bintaro-works → pilih ruang, daftar akun baru, booking; lalu isi form *Ajukan sewa kantor* dan cek lead-nya muncul di CRM
 
 **3b. Kosongkan data contoh & daftarkan organisasi asli**
@@ -104,14 +105,40 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 
 > Tidak perlu mengatur `COOKIE_SECURE` (otomatis mengikuti https) maupun `NEXT_PUBLIC_DEMO_MODE` (akun contoh tersembunyi secara default di produksi).
 
-**4d. Domain sendiri (opsional)**
+**4d. Login dengan Google / Facebook / TikTok (opsional, ±30–45 menit)**
+
+Tombolnya hanya muncul kalau kredensialnya sudah diisi — jadi boleh dilewati dulu dan dipasang belakangan. Semua alamat di bawah memakai domain aplikasi Anda (mis. `https://app.bintaroworks.id`, atau alamat `....vercel.app` sebelum punya domain).
+
+Alamat callback yang harus didaftarkan (persis, tanpa garis miring di akhir):
+
+| Penyedia | Alamat callback |
+|---|---|
+| Google | `https://DOMAIN-ANDA/api/auth/oauth/google/callback` |
+| Facebook | `https://DOMAIN-ANDA/api/auth/oauth/facebook/callback` |
+| TikTok | `https://DOMAIN-ANDA/api/auth/oauth/tiktok/callback` |
+
+- [ ] **Google** — buka https://console.cloud.google.com → *APIs & Services* → *OAuth consent screen* (isi nama aplikasi, email dukungan, logo) → *Credentials* → **Create credentials → OAuth client ID** → tipe **Web application** → *Authorized redirect URIs* = alamat callback Google di atas → salin **Client ID** & **Client secret**
+- [ ] **Facebook** — buka https://developers.facebook.com → *Create App* (tipe *Consumer*) → tambahkan produk **Facebook Login** → *Settings* → *Valid OAuth Redirect URIs* = alamat callback Facebook → salin **App ID** & **App Secret**. Agar bisa dipakai pengguna umum, aplikasi harus dipindahkan dari mode *Development* ke **Live** dan izin `email` + `public_profile` disetujui
+- [ ] **TikTok** — buka https://developers.tiktok.com → *Manage apps* → buat app → tambahkan **Login Kit** → scope `user.info.basic` → *Redirect URI* = alamat callback TikTok → salin **Client key** & **Client secret**
+- [ ] Vercel → Project → Settings → **Environment Variables**, isi yang Anda pakai saja:
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, dan `APP_URL` = alamat publik aplikasi
+- [ ] **Redeploy**, lalu buka halaman Masuk — tombol penyedia yang terisi akan muncul
+
+Yang perlu Anda tahu soal aturannya:
+
+- Login sosial **hanya untuk pelanggan**. Akun tim (Owner/Admin/Staf/Finance) tetap masuk dengan email + kata sandi, meski emailnya sama dengan akun Google mereka.
+- Kalau email dari Google/Facebook **sudah terverifikasi** dan cocok dengan akun pelanggan yang ada, akun itu **langsung disatukan** — pelanggan tidak jadi punya dua akun.
+- **TikTok tidak pernah memberi email.** Jadi TikTok tidak bisa dipakai untuk mendaftar; pelanggan masuk dulu (email atau Google), lalu menautkan TikTok di **Portal → Akun saya**. Sesudah itu TikTok bisa dipakai masuk sekali klik.
+- Pelanggan yang akunnya lahir dari login sosial diminta menyetel kata sandi cadangan di **Akun saya**; tautan terakhir tidak bisa dilepas sebelum kata sandi itu ada.
+
+**4e. Domain sendiri (opsional)**
 - [ ] Vercel → Project → Settings → Domains → tambah `app.bintaroworks.id`
 - [ ] Di pengelola DNS domain, tambahkan record CNAME sesuai instruksi Vercel
 
-**4e. Keamanan & cadangan**
+**4f. Keamanan & cadangan**
 - [ ] Aktifkan backup / point-in-time recovery di Neon/Supabase
 - [ ] Aktifkan verifikasi 2 langkah di akun GitHub, Vercel, dan Neon
-- [ ] Simpan `AUTH_SECRET` & connection string di password manager
+- [ ] Simpan `AUTH_SECRET`, connection string, dan semua *client secret* penyedia login di password manager
 
 ## Tahap 5 — Operasional rutin
 
@@ -134,6 +161,11 @@ Bagian yang sudah disiapkan otomatis ditandai **(otomatis)** — Anda cukup menj
 | `DATABASE_URL belum diatur` | File `.env` belum ada — jalankan ulang skrip setup |
 | `Can't reach database server` | Database belum menyala — `docker compose up -d` |
 | Build Vercel gagal di `prisma migrate deploy` | `DATABASE_URL` salah/kurang `?sslmode=require` untuk Neon |
+| Tombol Google/Facebook/TikTok tidak muncul | Kredensial penyedia belum diisi di Environment Variables, atau belum *Redeploy* |
+| `redirect_uri_mismatch` saat masuk | Alamat callback di konsol penyedia berbeda dengan domain aplikasi (perhatikan http/https, www, dan garis miring di akhir) |
+| "Sesi login kedaluwarsa atau tidak cocok" | Proses izin dibiarkan lebih dari 10 menit, atau cookie diblokir browser — ulangi dari halaman Masuk |
+| "Akun tim internal harus masuk memakai email dan kata sandi" | Memang disengaja: akun tim tidak boleh masuk lewat penyedia sosial |
+| "Akun TikTok ini belum ditautkan" | TikTok tidak memberi email — tautkan dulu lewat Portal → Akun saya |
 | Halaman `/o/...` menampilkan "tidak tersedia" | Halaman publik dimatikan di Pengaturan → *Aplikasi pelanggan*, atau slug organisasi salah |
 | Pelanggan gagal daftar: "Email ini sudah terdaftar" | Email tersebut sudah punya akun — minta pelanggan **Masuk** dulu lewat tombol di kanan atas, baru booking |
 | Login berhasil tapi kembali ke halaman login | Di laptop (`http://`) `COOKIE_SECURE` harus `false`; di server online (`https://`) boleh `true` |

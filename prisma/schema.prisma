@@ -23,6 +23,12 @@ enum Role {
   CUSTOMER
 }
 
+enum SocialProvider {
+  GOOGLE
+  FACEBOOK
+  TIKTOK
+}
+
 enum SpaceType {
   PRIVATE_OFFICE
   COWORKING_DESK
@@ -206,13 +212,36 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
+  /// false = akun dibuat lewat login sosial dan belum pernah menyetel kata sandi sendiri
+  passwordSet  Boolean  @default(true)
   phone        String?
   isActive     Boolean  @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  memberships Membership[]
+  memberships    Membership[]
+  socialAccounts SocialAccount[]
+}
+
+/// Akun sosial (Google/Facebook/TikTok) yang tertaut ke satu user.
+/// Satu user boleh menautkan beberapa penyedia sekaligus.
+model SocialAccount {
+  id             String         @id @default(cuid())
+  userId         String
+  provider       SocialProvider
+  providerUserId String // id unik dari penyedia (sub / id / open_id)
+  email          String? // email dari penyedia (TikTok tidak memberi email)
+  name           String?
+  avatarUrl      String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 model Membership {

@@ -1,12 +1,13 @@
 // Implementasi repository in-memory.
 // Dipakai untuk: (1) pengujian otomatis logika bisnis, (2) demo live di browser.
 // Produksi memakai PrismaRepo (src/server/prisma-repo.ts) dengan kontrak yang sama.
-import type { Membership, Organization, ScopedEntities, ScopedTable, User } from "../domain/types";
+import type { Membership, Organization, ScopedEntities, ScopedTable, SocialAccount, SocialProvider, User } from "../domain/types";
 import type { GlobalRepo, ListOptions, OrgRepo, ScopedTableRepo, Where } from "./types";
 
 export interface MemoryData {
   organizations: Organization[];
   users: User[];
+  socialAccounts: SocialAccount[];
   counters: { organizationId: string; key: string; value: number }[];
   tables: { [K in ScopedTable]: ScopedEntities[K][] };
 }
@@ -33,7 +34,7 @@ export const SCOPED_TABLES: ScopedTable[] = [
 export function emptyData(): MemoryData {
   const tables = {} as MemoryData["tables"];
   for (const t of SCOPED_TABLES) (tables as Record<string, unknown[]>)[t] = [];
-  return { organizations: [], users: [], counters: [], tables };
+  return { organizations: [], users: [], socialAccounts: [], counters: [], tables };
 }
 
 let idCounter = 0;
@@ -76,7 +77,7 @@ export class MemoryRepo implements GlobalRepo {
     const u = this.data.users.find((x) => x.id === id);
     return u ? clone(u) : null;
   }
-  async createUser(input: { email: string; name: string; passwordHash: string; phone?: string | null }) {
+  async createUser(input: { email: string; name: string; passwordHash: string; phone?: string | null; passwordSet?: boolean }) {
     if (this.data.users.some((u) => u.email.toLowerCase() === input.email.toLowerCase())) {
       throw new Error("UNIQUE_VIOLATION:email");
     }
@@ -86,6 +87,7 @@ export class MemoryRepo implements GlobalRepo {
       email: input.email.toLowerCase(),
       name: input.name,
       passwordHash: input.passwordHash,
+      passwordSet: input.passwordSet ?? true,
       phone: input.phone ?? null,
       isActive: true,
       lastLoginAt: null,
@@ -103,6 +105,52 @@ export class MemoryRepo implements GlobalRepo {
   }
   async membershipsOfUser(userId: string) {
     return clone(this.data.tables.membership.filter((m) => m.userId === userId)) as Membership[];
+  }
+
+  async findSocialAccount(provider: SocialProvider, providerUserId: string) {
+    const a = this.data.socialAccounts.find((x) => x.provider === provider && x.providerUserId === providerUserId);
+    return a ? clone(a) : null;
+  }
+  async socialAccountsOfUser(userId: string) {
+    return clone(this.data.socialAccounts.filter((x) => x.userId === userId));
+  }
+  async createSocialAccount(input: {
+    userId: string;
+    provider: SocialProvider;
+    providerUserId: string;
+    email?: string | null;
+    name?: string | null;
+    avatarUrl?: string | null;
+    lastLoginAt?: Date | null;
+  }) {
+    if (this.data.socialAccounts.some((x) => x.provider === input.provider && x.providerUserId === input.providerUserId)) {
+      throw new Error("UNIQUE_VIOLATION:provider_providerUserId");
+    }
+    const t = this.now();
+    const row: SocialAccount = {
+      id: makeId("sa"),
+      userId: input.userId,
+      provider: input.provider,
+      providerUserId: input.providerUserId,
+      email: input.email ?? null,
+      name: input.name ?? null,
+      avatarUrl: input.avatarUrl ?? null,
+      lastLoginAt: input.lastLoginAt ?? null,
+      createdAt: t,
+      updatedAt: t,
+    };
+    this.data.socialAccounts.push(row);
+    return clone(row);
+  }
+  async updateSocialAccount(id: string, patch: Partial<SocialAccount>) {
+    const a = this.data.socialAccounts.find((x) => x.id === id);
+    if (!a) throw new Error("NOT_FOUND");
+    Object.assign(a, patch, { updatedAt: this.now() });
+    return clone(a);
+  }
+  async deleteSocialAccount(id: string) {
+    const i = this.data.socialAccounts.findIndex((x) => x.id === id);
+    if (i >= 0) this.data.socialAccounts.splice(i, 1);
   }
   async getOrganization(id: string) {
     const o = this.data.organizations.find((x) => x.id === id);

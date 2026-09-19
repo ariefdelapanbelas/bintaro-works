@@ -1,7 +1,7 @@
 import { AppError } from "../domain/errors";
 import { ROLE_PERMISSIONS } from "../domain/permissions";
 import type { AuthContext, Membership } from "../domain/types";
-import { changePasswordSchema, loginSchema, parse, signupSchema } from "../domain/validation";
+import { changePasswordSchema, loginSchema, parse, setPasswordSchema, signupSchema } from "../domain/validation";
 import type { Deps } from "../repo/types";
 import { seedOrganizationDefaults } from "./defaults";
 import { audit, makeSvc } from "./context";
@@ -97,6 +97,22 @@ export async function changePassword(deps: Deps, auth: AuthContext, body: unknow
   if (!(await deps.hasher.verify(input.currentPassword, user.passwordHash))) {
     throw new AppError("VALIDATION", "Kata sandi saat ini salah", { currentPassword: "salah" });
   }
-  await deps.db.updateUser(user.id, { passwordHash: await deps.hasher.hash(input.newPassword) });
+  await deps.db.updateUser(user.id, { passwordHash: await deps.hasher.hash(input.newPassword), passwordSet: true });
+  return { ok: true };
+}
+
+/**
+ * Setel kata sandi pertama kali — hanya untuk akun yang dibuat lewat login sosial
+ * (passwordSet = false), agar pemiliknya punya cara masuk cadangan.
+ */
+export async function setPassword(deps: Deps, auth: AuthContext, body: unknown) {
+  const input = parse(setPasswordSchema, body);
+  const user = await deps.db.getUser(auth.userId);
+  if (!user) throw invalid();
+  if (user.passwordSet) {
+    throw new AppError("CONFLICT", "Akun ini sudah punya kata sandi — pakai menu Ganti kata sandi.");
+  }
+  await deps.db.updateUser(user.id, { passwordHash: await deps.hasher.hash(input.newPassword), passwordSet: true });
+  await audit(makeSvc(deps, auth), "auth.password.set", "User", user.id, "Menyetel kata sandi pertama kali");
   return { ok: true };
 }

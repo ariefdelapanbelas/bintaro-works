@@ -1,4 +1,5 @@
-import type { Organization, ScopedEntities, ScopedTable, User } from "../domain/types";
+import type { Organization, ScopedEntities, ScopedTable, SocialAccount, SocialProvider, User } from "../domain/types";
+import type { SocialGateway } from "../services/oauth";
 
 /** Kolom yang diisi otomatis oleh repository. */
 type AutoFields = "id" | "organizationId" | "createdAt" | "updatedAt";
@@ -48,9 +49,23 @@ export type OrgRepo = { [K in ScopedTable]: ScopedTableRepo<ScopedEntities[K]> }
 export interface GlobalRepo {
   findUserByEmail(email: string): Promise<User | null>;
   getUser(id: string): Promise<User | null>;
-  createUser(data: { email: string; name: string; passwordHash: string; phone?: string | null }): Promise<User>;
-  updateUser(id: string, data: Partial<Pick<User, "name" | "passwordHash" | "phone" | "isActive" | "lastLoginAt">>): Promise<User>;
+  createUser(data: { email: string; name: string; passwordHash: string; phone?: string | null; passwordSet?: boolean }): Promise<User>;
+  updateUser(id: string, data: Partial<Pick<User, "name" | "passwordHash" | "passwordSet" | "phone" | "isActive" | "lastLoginAt">>): Promise<User>;
   membershipsOfUser(userId: string): Promise<ScopedEntities["membership"][]>;
+  /** Akun sosial (login Google/Facebook/TikTok). */
+  findSocialAccount(provider: SocialProvider, providerUserId: string): Promise<SocialAccount | null>;
+  socialAccountsOfUser(userId: string): Promise<SocialAccount[]>;
+  createSocialAccount(data: {
+    userId: string;
+    provider: SocialProvider;
+    providerUserId: string;
+    email?: string | null;
+    name?: string | null;
+    avatarUrl?: string | null;
+    lastLoginAt?: Date | null;
+  }): Promise<SocialAccount>;
+  updateSocialAccount(id: string, data: Partial<Pick<SocialAccount, "email" | "name" | "avatarUrl" | "lastLoginAt">>): Promise<SocialAccount>;
+  deleteSocialAccount(id: string): Promise<void>;
   getOrganization(id: string): Promise<Organization | null>;
   /** Dipakai halaman publik: cari organisasi berdasarkan slug. */
   findOrganizationBySlug(slug: string): Promise<Organization | null>;
@@ -70,4 +85,6 @@ export interface Deps {
   db: GlobalRepo;
   hasher: PasswordHasher;
   now: () => Date;
+  /** Penyedia login sosial (Google/Facebook/TikTok). Opsional — bila kosong, fitur mati. */
+  social?: SocialGateway;
 }

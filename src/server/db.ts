@@ -4,6 +4,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import type { Deps } from "@/core/repo/types";
 import { scryptHasher } from "./password";
 import { PrismaRepo } from "./prisma-repo";
+import { createSocialGateway } from "./social";
 
 // Singleton PrismaClient agar hot-reload dev tidak membuat koneksi berlebih.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -27,6 +28,6 @@ export function getPrisma(): PrismaClient {
 
 let cached: Deps | undefined;
 export function getDeps(): Deps {
-  cached ??= { db: new PrismaRepo(getPrisma()), hasher: scryptHasher, now: () => new Date() };
+  cached ??= { db: new PrismaRepo(getPrisma()), hasher: scryptHasher, now: () => new Date(), social: createSocialGateway() };
   return cached;
 }

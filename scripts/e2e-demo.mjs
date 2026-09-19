@@ -158,6 +158,9 @@ await step("booking bentrok ditolak & booking valid tersimpan", async () => {
   await page.getByRole("button", { name: "Booking baru" }).click();
   await page.waitForSelector("#bk-title");
   const d = new Date(Date.now() + 7 * 3600e3 + 20 * 86400e3).toISOString().slice(0, 10);
+  // Kunci ruangnya agar uji bentrok tidak bergantung pada urutan default.
+  const roomValue = await page.$eval("#bk-space", (el) => [...el.options].find((o) => o.text.startsWith("Podcast Studio"))?.value ?? el.options[0].value);
+  await page.selectOption("#bk-space", roomValue);
   await page.fill("#bk-date", d);
   await page.selectOption("#bk-start", "08:00");
   await page.selectOption("#bk-end", "09:30");
@@ -167,6 +170,8 @@ await step("booking bentrok ditolak & booking valid tersimpan", async () => {
   await page.getByRole("dialog").getByRole("button", { name: "Simpan booking" }).click();
   await toast("Booking tersimpan");
   await page.getByRole("button", { name: "Booking baru" }).click();
+  await page.waitForSelector("#bk-space");
+  await page.selectOption("#bk-space", roomValue);
   await page.fill("#bk-date", d);
   await page.selectOption("#bk-start", "09:00");
   await page.selectOption("#bk-end", "10:00");
@@ -229,6 +234,7 @@ await step("portal: konfirmasi pembayaran tagihan", async () => {
   await go("/portal/invoices");
   await page.getByRole("button", { name: "Konfirmasi bayar" }).first().click();
   await page.waitForSelector("#cf-amount");
+  await page.fill("#cf-amount", "100000");
   await page.fill("#cf-ref", "TRX-KONF-001");
   await page.getByRole("dialog").getByRole("button", { name: "Kirim konfirmasi" }).click();
   await toast("sedang diverifikasi");
@@ -350,6 +356,74 @@ await step("aplikasi pelanggan di HP (390px)", async () => {
   });
   if (overflow) throw new Error("halaman publik meluber horizontal di mobile: " + overflow);
   await page.setViewportSize({ width: 1440, height: 900 });
+});
+
+await step("login sosial: daftar lewat Google dari halaman publik", async () => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await go("/dashboard");
+  await page.getByRole("button", { name: "Keluar" }).first().click();
+  await page.waitForSelector("#login-email");
+  await go("/o/bintaro-works");
+  await page.getByRole("heading", { level: 2, name: "Booking per jam" }).waitFor({ timeout: 8000 });
+  await page.locator("#ruang button.card").first().click();
+  await page.waitForSelector("#pb-date");
+  const d = new Date(Date.now() + 7 * 3600e3 + 55 * 86400e3).toISOString().slice(0, 10);
+  await page.fill("#pb-date", d);
+  await page.selectOption("#pb-start", "14:00");
+  await page.selectOption("#pb-end", "15:00");
+  await page.getByRole("dialog").getByRole("button", { name: "Lanjutkan" }).click();
+  await page.waitForSelector("#social-google");
+  await page.screenshot({ path: `${shots}/social-daftar-cepat.png`, fullPage: false });
+  await page.click("#social-google");
+  await page.waitForSelector("#sim-name");
+  await page.fill("#sim-name", "Sinta Dewi");
+  await page.fill("#sim-email", `sinta.${Date.now()}@gmail.com`);
+  await page.screenshot({ path: `${shots}/social-izin-simulasi.png`, fullPage: false });
+  await page.getByRole("dialog").getByRole("button", { name: "Izinkan & lanjutkan" }).click();
+  await page.getByText("Booking terkonfirmasi").first().waitFor({ timeout: 12000 });
+  await page.getByRole("button", { name: "Lihat booking & tagihan" }).click();
+  await page.getByRole("heading", { name: /Halo, Sinta/ }).waitFor({ timeout: 8000 });
+});
+
+await step("portal: akun saya — tautkan TikTok & setel kata sandi", async () => {
+  await go("/portal/akun");
+  await page.getByRole("heading", { name: "Akun saya" }).waitFor({ timeout: 6000 });
+  await page.getByText("Google").first().waitFor();
+  await page.click("#social-tiktok");
+  await page.waitForSelector("#sim-name");
+  await page.fill("#sim-name", "sinta.dewi");
+  await page.getByRole("dialog").getByRole("button", { name: "Izinkan & lanjutkan" }).click();
+  await toast("Akun ditautkan");
+  await page.getByText("TikTok").first().waitFor({ timeout: 6000 });
+  await page.fill("#set-password", "sinta12345");
+  await page.getByRole("button", { name: "Simpan kata sandi" }).click();
+  await toast("Kata sandi tersimpan");
+  await page.getByText("Kata sandi sudah disetel").waitFor({ timeout: 6000 });
+  await page.screenshot({ path: `${shots}/portal-akun-tertaut.png`, fullPage: true });
+});
+
+await step("login sosial dari halaman Masuk", async () => {
+  await page.getByRole("button", { name: "Keluar" }).first().click();
+  await page.waitForSelector("#login-email");
+  await page.waitForSelector("#social-google");
+  await page.screenshot({ path: `${shots}/login-sosial.png`, fullPage: false });
+  await page.click("#social-tiktok");
+  await page.waitForSelector("#sim-name");
+  await page.fill("#sim-name", "sinta.dewi");
+  await page.getByRole("dialog").getByRole("button", { name: "Izinkan & lanjutkan" }).click();
+  await page.getByRole("heading", { name: /Halo, Sinta/ }).waitFor({ timeout: 10000 });
+});
+
+await step("login sosial akun tim internal ditolak", async () => {
+  await page.getByRole("button", { name: "Keluar" }).first().click();
+  await page.waitForSelector("#login-email");
+  await page.click("#social-google");
+  await page.waitForSelector("#sim-name");
+  await page.fill("#sim-name", "Arief Rahman");
+  await page.fill("#sim-email", "owner@bintaroworks.id");
+  await page.getByRole("dialog").getByRole("button", { name: "Izinkan & lanjutkan" }).click();
+  await page.getByText(/tim internal/i).first().waitFor({ timeout: 8000 });
+  await page.keyboard.press("Escape");
 });
 
 await browser.close();
