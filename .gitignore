@@ -10,3 +10,6 @@ demo/shots
 next-env.d.ts
 .DS_Store
 .agents/mcp_config.json
+
+.vercel
+.env*
