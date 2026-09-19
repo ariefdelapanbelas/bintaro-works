@@ -2,7 +2,7 @@
 // Butuh: esbuild & tailwindcss (tersedia sebagai devDependency proyek).
 // Jalankan: node scripts/build-demo.mjs
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync as fsCopy, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,7 @@ const result = await esbuild.build({
   target: ["es2020"],
   jsx: "automatic",
   platform: "browser",
+  loader: { ".png": "dataurl", ".svg": "dataurl" },
   tsconfig: resolve(root, "tsconfig.json"),
   define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_DEMO_MODE": '"true"' },
   logLevel: "warning",
@@ -36,8 +37,23 @@ execFileSync(process.execPath, [tailwindCli, "-c", resolve(root, "tailwind.confi
 });
 const css = readFileSync(resolve(out, "app.css"), "utf8");
 
+let faviconTag = "";
+const iconPath = resolve(root, "public/bintaro-works-icon.png");
+if (existsSync(iconPath)) {
+  const b64 = readFileSync(iconPath).toString("base64");
+  faviconTag = `<link rel="icon" type="image/png" href="data:image/png;base64,${b64}">`;
+  fsCopy(iconPath, resolve(out, "icon.png"));
+  fsCopy(iconPath, resolve(out, "bintaro-works-icon.png"));
+}
+const logoPath = resolve(root, "public/bintaro-works-logo.png");
+if (existsSync(logoPath)) {
+  fsCopy(logoPath, resolve(out, "bintaro-works-logo.png"));
+  fsCopy(logoPath, resolve(out, "logo.png"));
+}
+
 const head = `<title>Bintaro Works OS</title>
 <meta name="description" content="Business operating system untuk workspace & business services">
+${faviconTag}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
@@ -47,7 +63,10 @@ const bodyInner = `<div id="root"></div>
 <script>${js.replace(/<\/script/gi, "<\\/script")}</script>`;
 
 // Versi lengkap untuk dibuka langsung di browser
-writeFileSync(resolve(out, "index.html"), `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">${head}</head><body>${bodyInner}</body></html>`);
+const fullHtml = `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">${head}</head><body>${bodyInner}</body></html>`;
+writeFileSync(resolve(out, "index.html"), fullHtml);
+writeFileSync(resolve(out, "404.html"), fullHtml);
+writeFileSync(resolve(out, ".nojekyll"), "");
 // Versi fragmen (tanpa doctype/head/body) untuk dipublikasikan sebagai Artifact
 writeFileSync(resolve(out, "artifact.html"), `${head}\n${bodyInner}\n`);
 

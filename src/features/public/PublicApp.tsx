@@ -23,6 +23,7 @@ import { Link, useNav } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { Modal, useToast } from "@/ui/overlay";
 import { Badge, Button, ErrorBox, Field, Input, Select, Spinner, Textarea } from "@/ui/primitives";
+import { logoSrc } from "@/ui/Logo";
 import { AvailabilityStrip, TIME_OPTIONS } from "../bookings/BookingsPage";
 import { ThemeToggle } from "../shell/AppShell";
 
@@ -41,12 +42,13 @@ function PublicHeader({ info, slug }: { info?: PublicInfo; slug: string }) {
     <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur" style={{ top: "env(safe-area-inset-top, 0px)" }}>
       <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
         <Link href={`/o/${slug}`} className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 grid-cols-2 grid-rows-2 gap-[3px] rounded-lg bg-accent p-[7px]" aria-hidden>
-            <span className="rounded-[2px] bg-accent-ink" />
-            <span className="rounded-[2px] bg-accent-ink/40" />
-            <span className="rounded-[2px] bg-accent-ink/40" />
-            <span className="rounded-[2px] bg-accent-ink" />
-          </span>
+          <img
+            src={logoSrc}
+            alt="Bintaro Works Logo"
+            width={34}
+            height={34}
+            className="h-8 w-8 rounded-lg object-contain shadow-sm ring-1 ring-black/10 dark:ring-white/10 shrink-0"
+          />
           <span className="font-display text-[15px] font-bold leading-tight">{info?.organization.name ?? "Bintaro Works"}</span>
         </Link>
         <div className="ml-auto flex items-center gap-1">
@@ -66,7 +68,16 @@ function PublicFooter({ info }: { info: PublicInfo }) {
     <footer className="mt-12 border-t border-line bg-raised">
       <div className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:grid-cols-2">
         <div>
-          <p className="font-display text-lg font-bold">{o.name}</p>
+          <div className="flex items-center gap-2.5 mb-2">
+            <img
+              src={logoSrc}
+              alt="Bintaro Works Logo"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-md object-contain shadow-sm ring-1 ring-black/10 dark:ring-white/10 shrink-0"
+            />
+            <p className="font-display text-lg font-bold">{o.name}</p>
+          </div>
           {o.address && (
             <p className="mt-2 flex items-start gap-2 text-[13px] text-muted">
               <LuMapPin className="mt-0.5 h-4 w-4 shrink-0" /> {o.address}
