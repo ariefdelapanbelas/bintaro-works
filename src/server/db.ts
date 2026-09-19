@@ -17,7 +17,13 @@ const globalForPrisma = globalThis as unknown as {
 
 /** Connection string runtime. Mendukung nama variabel dari integrasi Vercel (Neon / Prisma Postgres). */
 export function runtimeDatabaseUrl(): string | undefined {
-  return process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL;
+  const url = process.env.DATABASE_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL;
+  if (!url) return undefined;
+  // Di lingkungan serverless Vercel, localhost / 127.0.0.1 tidak dapat dijangkau.
+  if (process.env.VERCEL === "1" && (url.includes("localhost") || url.includes("127.0.0.1"))) {
+    return undefined;
+  }
+  return url;
 }
 
 function createClient() {
