@@ -38,14 +38,21 @@ execFileSync(process.execPath, [tailwindCli, "-c", resolve(root, "tailwind.confi
 const css = readFileSync(resolve(out, "app.css"), "utf8");
 
 let faviconTag = "";
-const iconPath = resolve(root, "public/bintaro-works-icon.png");
+const iconPath = existsSync(resolve(root, "public/bintaro-works-icon.png"))
+  ? resolve(root, "public/bintaro-works-icon.png")
+  : resolve(root, "src/app/icon.png");
+
 if (existsSync(iconPath)) {
   const b64 = readFileSync(iconPath).toString("base64");
   faviconTag = `<link rel="icon" type="image/png" href="data:image/png;base64,${b64}">`;
   fsCopy(iconPath, resolve(out, "icon.png"));
   fsCopy(iconPath, resolve(out, "bintaro-works-icon.png"));
 }
-const logoPath = resolve(root, "public/bintaro-works-logo.png");
+
+const logoPath = existsSync(resolve(root, "public/bintaro-works-logo.png"))
+  ? resolve(root, "public/bintaro-works-logo.png")
+  : resolve(root, "src/bintaro-works-logo.png");
+
 if (existsSync(logoPath)) {
   fsCopy(logoPath, resolve(out, "bintaro-works-logo.png"));
   fsCopy(logoPath, resolve(out, "logo.png"));

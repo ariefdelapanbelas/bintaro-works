@@ -44,8 +44,8 @@ const NAV: { href: string; label: string; icon: ReactNode; perm: Permission; gro
   { href: "/audit", label: "Log Aktivitas", icon: <LuHistory />, perm: "audit.view", group: "Sistem" },
 ];
 
-import { Logo } from "@/ui/Logo";
-export { Logo };
+import { Logo, logoSrc } from "@/ui/Logo";
+export { Logo, logoSrc };
 
 export function ThemeToggle({ className }: { className?: string }) {
   const [pref, setPref] = useState<ThemePref>("system");
