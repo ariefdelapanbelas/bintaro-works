@@ -12,7 +12,7 @@
 //              token     https://open.tiktokapis.com/v2/oauth/token/
 //              profil    https://open.tiktokapis.com/v2/user/info/     (TikTok TIDAK pernah memberi email)
 import type { SocialProvider } from "@/core/domain/types";
-import type { SocialGateway, SocialProfile } from "@/core/services/oauth";
+import { createDemoSocialGateway, type SocialGateway, type SocialProfile } from "@/core/services/oauth";
 
 const FB_VERSION = process.env.FACEBOOK_GRAPH_VERSION?.trim() || "v25.0";
 
@@ -220,16 +220,23 @@ export function callbackUrl(origin: string, provider: SocialProvider): string {
 
 export function createSocialGateway(): SocialGateway {
   const specs = providerSpecs();
-  return {
-    mode: "redirect",
-    enabled: () => Object.keys(specs) as SocialProvider[],
-    async profileFromCode(provider, input) {
-      const spec = specs[provider];
-      if (!spec) throw new Error(`Penyedia ${provider} belum dikonfigurasi`);
-      const redirectUri = input.redirectUri ?? "";
-      if (provider === "GOOGLE") return googleProfile(spec, input.code, redirectUri, input.codeVerifier);
-      if (provider === "FACEBOOK") return facebookProfile(spec, input.code, redirectUri);
-      return tiktokProfile(spec, input.code, redirectUri, input.codeVerifier);
-    },
-  };
+  const configured = Object.keys(specs) as SocialProvider[];
+  if (configured.length > 0) {
+    return {
+      mode: "redirect",
+      enabled: () => configured,
+      async profileFromCode(provider, input) {
+        const spec = specs[provider];
+        if (!spec) throw new Error(`Penyedia ${provider} belum dikonfigurasi`);
+        const redirectUri = input.redirectUri ?? "";
+        if (provider === "GOOGLE") return googleProfile(spec, input.code, redirectUri, input.codeVerifier);
+        if (provider === "FACEBOOK") return facebookProfile(spec, input.code, redirectUri);
+        return tiktokProfile(spec, input.code, redirectUri, input.codeVerifier);
+      },
+    };
+  }
+
+  // Jika belum ada kredensial OAuth asli yang disetel di environment, aktifkan demo gateway
+  // agar tombol Google, Facebook, dan TikTok tetap tampil dan berfungsi persis seperti di GitHub Pages!
+  return createDemoSocialGateway();
 }
