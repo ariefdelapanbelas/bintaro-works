@@ -13,8 +13,10 @@ import * as contracts from "../services/contracts";
 import * as crm from "../services/crm";
 import * as customers from "../services/customers";
 import * as dash from "../services/dashboard";
+import * as oauth from "../services/oauth";
 import * as portal from "../services/portal";
 import * as publicSite from "../services/public";
+import { oauthCallbackSchema, parse } from "../domain/validation";
 import { rateLimit } from "./rate-limit";
 import * as settings from "../services/settings";
 import * as spaces from "../services/spaces";
@@ -201,6 +203,19 @@ export async function handleApi(deps: Deps, req: ApiRequest, onUnexpected?: (e: 
     if (req.method === "POST" && req.path === "/auth/logout") {
       return { status: 200, body: { ok: true }, setSession: null };
     }
+    // ---- Login dengan akun sosial (Google/Facebook/TikTok)
+    if (req.method === "GET" && req.path === "/auth/providers") {
+      return { status: 200, body: oauth.listProviders(deps) };
+    }
+    const oauthCb = /^\/auth\/oauth\/([a-zA-Z]+)\/callback$/.exec(req.path);
+    if (oauthCb && req.method === "POST") {
+      const ip = req.ip ?? "anon";
+      if (!rateLimit(`oauth:${ip}`, 20, 10 * 60_000)) throw new AppError("CONFLICT", "Terlalu banyak percobaan masuk. Coba lagi beberapa menit lagi.");
+      const provider = oauth.parseProvider(oauthCb[1]);
+      const input = parse(oauthCallbackSchema, req.body);
+      const r = await oauth.completeOAuth(deps, provider, input);
+      return { status: 200, body: { redirectTo: r.redirectTo, isNew: r.isNew, provider: r.provider }, setSession: r.session };
+    }
     // ---- Aplikasi pelanggan (publik, tanpa sesi) — dibatasi rate limit per IP
     const pub = /^\/public\/([^/]+)(\/[a-z-]+)?$/.exec(req.path);
     if (pub) {
@@ -235,6 +250,17 @@ export async function handleApi(deps: Deps, req: ApiRequest, onUnexpected?: (e: 
     }
     if (req.method === "GET" && req.path === "/auth/me") return { status: 200, body: await auth.me(deps, ctx) };
     if (req.method === "POST" && req.path === "/auth/password") return { status: 200, body: await auth.changePassword(deps, ctx, req.body) };
+    if (req.method === "POST" && req.path === "/auth/password/set") return { status: 200, body: await auth.setPassword(deps, ctx, req.body) };
+    if (req.method === "GET" && req.path === "/auth/social-accounts") return { status: 200, body: await oauth.listMyAccounts(deps, ctx) };
+    const socialSub = /^\/auth\/social-accounts\/([^/]+)$/.exec(req.path);
+    if (socialSub && req.method === "POST") {
+      const provider = oauth.parseProvider(socialSub[1]);
+      const input = parse(oauthCallbackSchema, req.body);
+      return { status: 201, body: await oauth.linkMyAccount(deps, ctx, provider, input) };
+    }
+    if (socialSub && req.method === "DELETE") {
+      return { status: 200, body: await oauth.unlinkMyAccount(deps, ctx, socialSub[1]) };
+    }
 
     let methodMismatch = false;
     for (const r of routes) {

@@ -6,6 +6,7 @@ import { Link, useNav, useSearchParam } from "@/client/nav";
 import { useSession } from "@/client/session";
 import { Button, ErrorBox, Field, Input } from "@/ui/primitives";
 import { Logo, ThemeToggle } from "../shell/AppShell";
+import { SocialButtons } from "./SocialButtons";
 
 // Kotak akun contoh aktif secara default (bisa dinonaktifkan dengan NEXT_PUBLIC_DEMO_MODE="false").
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
@@ -66,6 +67,8 @@ export function LoginPage() {
   const { replace } = useNav();
   const { refresh } = useSession();
   const next = useSearchParam("next");
+  // Pesan dari alur login sosial (?error=...) — mis. izin dibatalkan.
+  const socialError = useSearchParam("error");
   const [email, setEmail] = useState(DEMO_MODE ? "owner@bintaroworks.id" : "");
   const [password, setPassword] = useState(DEMO_MODE ? "bintaro123" : "");
   const [error, setError] = useState<ApiError | null>(null);
@@ -91,6 +94,11 @@ export function LoginPage() {
     <AuthLayout>
       <h2 className="text-[28px] font-bold">Masuk</h2>
       <p className="mt-1 text-[13.5px] text-muted">Gunakan akun kerja Anda untuk melanjutkan.</p>
+      {socialError && (
+        <p className="mt-4 rounded-xl border border-bad/40 bg-bad-soft px-4 py-3 text-[13px] text-bad" role="alert">
+          {socialError}
+        </p>
+      )}
       <form onSubmit={submit} className="mt-6 flex flex-col gap-4" noValidate>
         <ErrorBox error={error && !error.fields ? error : null} />
         <Field label="Email" htmlFor="login-email" error={error?.fields?.email}>
@@ -103,6 +111,8 @@ export function LoginPage() {
           Masuk <LuArrowRight className="h-4 w-4" />
         </Button>
       </form>
+
+      <SocialButtons next={next ?? undefined} />
 
       <div className="mt-8 rounded-xl border border-dashed border-line p-4" hidden={!DEMO_MODE}>
         <p className="eyebrow">Akun contoh · sandi bintaro123</p>

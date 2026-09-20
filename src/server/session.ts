@@ -53,6 +53,34 @@ async function hmac(data: string): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
 }
 
+/** Token bertanda tangan umum (dipakai juga untuk state OAuth). */
+export async function signToken(payload: Record<string, unknown>, ttlSeconds: number): Promise<string> {
+  const body = b64url(enc.encode(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds })));
+  return `${body}.${b64url(await hmac(body))}`;
+}
+
+export async function verifyToken<T extends Record<string, unknown>>(token: string | undefined | null): Promise<T | null> {
+  if (!token) return null;
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const expected = await hmac(body);
+  const given = fromB64url(sig);
+  if (given.length !== expected.length) return null;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected[i] ^ given[i];
+  if (diff !== 0) return null;
+  try {
+    const data = JSON.parse(new TextDecoder().decode(fromB64url(body))) as T & { exp?: number };
+    if (!data.exp || data.exp < Math.floor(Date.now() / 1000)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export const OAUTH_COOKIE = "bwos_oauth";
+export const OAUTH_TTL_SECONDS = 10 * 60;
+
 export async function signSession(payload: SessionPayload): Promise<string> {
   const body = b64url(enc.encode(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS })));
   return `${body}.${b64url(await hmac(body))}`;

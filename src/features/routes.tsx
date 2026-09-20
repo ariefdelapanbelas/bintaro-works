@@ -13,6 +13,7 @@ import { CatalogPage } from "./catalog/CatalogPage";
 import { RequestsPage } from "./requests/RequestsPage";
 import { AuditPage, SettingsPage } from "./settings/SettingsPages";
 import { PortalBookingsPage, PortalHomePage, PortalInvoicePage, PortalInvoicesPage, PortalRequestsPage } from "./portal/PortalPages";
+import { PortalAccountPage } from "./portal/PortalAccountPage";
 import { PublicHomePage, PublicInquiryPage } from "./public/PublicApp";
 
 export interface RouteDef {
@@ -47,6 +48,7 @@ export const ROUTES: RouteDef[] = [
   { pattern: "/portal/invoices", shell: "portal", render: () => <PortalInvoicesPage /> },
   { pattern: "/portal/invoices/:id", shell: "portal", render: (p) => <PortalInvoicePage id={p.id} /> },
   { pattern: "/portal/requests", shell: "portal", render: () => <PortalRequestsPage /> },
+  { pattern: "/portal/akun", shell: "portal", render: () => <PortalAccountPage /> },
 ];
 
 export function matchRoute(pathname: string): { route: RouteDef; params: Record<string, string> } | null {

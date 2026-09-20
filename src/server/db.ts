@@ -4,6 +4,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 import type { Deps } from "@/core/repo/types";
 import { scryptHasher } from "./password";
 import { PrismaRepo } from "./prisma-repo";
+import { createSocialGateway } from "./social";
 
 import { MemoryRepo } from "@/core/repo/memory";
 import { seedDemo } from "@/core/seed/demo";
@@ -41,7 +42,12 @@ export function getPrisma(): PrismaClient {
 export async function getDeps(): Promise<Deps> {
   const dbUrl = runtimeDatabaseUrl();
   if (dbUrl) {
-    globalForPrisma.cachedDeps ??= { db: new PrismaRepo(getPrisma()), hasher: scryptHasher, now: () => new Date() };
+    globalForPrisma.cachedDeps ??= {
+      db: new PrismaRepo(getPrisma()),
+      hasher: scryptHasher,
+      now: () => new Date(),
+      social: createSocialGateway(),
+    };
     return globalForPrisma.cachedDeps;
   }
 
@@ -53,7 +59,12 @@ export async function getDeps(): Promise<Deps> {
     console.warn("[bwos] DATABASE_URL belum diatur — mengaktifkan in-memory demo repository untuk preview.");
     const memDb = new MemoryRepo();
     await seedDemo(memDb, scryptHasher, new Date());
-    const deps: Deps = { db: memDb, hasher: scryptHasher, now: () => new Date() };
+    const deps: Deps = {
+      db: memDb,
+      hasher: scryptHasher,
+      now: () => new Date(),
+      social: createSocialGateway(),
+    };
     globalForPrisma.cachedDeps = deps;
     return deps;
   })();

@@ -1,6 +1,6 @@
 // Implementasi repository untuk PostgreSQL via Prisma ORM 7.
 // Setiap query ter-scope organizationId — lapis pertama isolasi multi-tenant.
-import type { Membership, Organization, ScopedTable, User } from "@/core/domain/types";
+import type { Membership, Organization, ScopedTable, SocialAccount, SocialProvider, User } from "@/core/domain/types";
 import type { GlobalRepo, ListOptions, OrgRepo, ScopedTableRepo, Where } from "@/core/repo/types";
 import { SCOPED_TABLES } from "@/core/repo/memory";
 import type { PrismaClient } from "@/generated/prisma/client";
@@ -108,14 +108,37 @@ export class PrismaRepo implements GlobalRepo {
   getUser(id: string) {
     return this.prisma.user.findUnique({ where: { id } }) as Promise<User | null>;
   }
-  createUser(data: { email: string; name: string; passwordHash: string; phone?: string | null }) {
-    return this.prisma.user.create({ data: { ...data, email: data.email.toLowerCase() } }) as Promise<User>;
+  createUser(data: { email: string; name: string; passwordHash: string; phone?: string | null; passwordSet?: boolean }) {
+    return this.prisma.user.create({ data: stripUndefined({ ...data, email: data.email.toLowerCase() }) as any }) as Promise<User>;
   }
   updateUser(id: string, data: Partial<User>) {
     return this.prisma.user.update({ where: { id }, data: stripUndefined(data) as any }) as Promise<User>;
   }
   membershipsOfUser(userId: string) {
     return this.prisma.membership.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }) as Promise<Membership[]>;
+  }
+  findSocialAccount(provider: SocialProvider, providerUserId: string) {
+    return this.prisma.socialAccount.findUnique({ where: { provider_providerUserId: { provider, providerUserId } } }) as Promise<SocialAccount | null>;
+  }
+  socialAccountsOfUser(userId: string) {
+    return this.prisma.socialAccount.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }) as Promise<SocialAccount[]>;
+  }
+  createSocialAccount(data: {
+    userId: string;
+    provider: SocialProvider;
+    providerUserId: string;
+    email?: string | null;
+    name?: string | null;
+    avatarUrl?: string | null;
+    lastLoginAt?: Date | null;
+  }) {
+    return this.prisma.socialAccount.create({ data: stripUndefined(data) as any }) as Promise<SocialAccount>;
+  }
+  updateSocialAccount(id: string, data: Partial<SocialAccount>) {
+    return this.prisma.socialAccount.update({ where: { id }, data: stripUndefined(data) as any }) as Promise<SocialAccount>;
+  }
+  async deleteSocialAccount(id: string) {
+    await this.prisma.socialAccount.deleteMany({ where: { id } });
   }
   getOrganization(id: string) {
     return this.prisma.organization.findUnique({ where: { id } }) as Promise<Organization | null>;

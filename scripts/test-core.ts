@@ -9,6 +9,8 @@ import { PrismaRepo } from "../src/server/prisma-repo";
 import { createFakePrisma } from "./fake-prisma";
 import { DEMO_PASSWORD, seedDemo } from "../src/core/seed/demo";
 import type { SessionPayload } from "../src/core/services/auth";
+import type { SocialGateway, SocialProfile } from "../src/core/services/oauth";
+import type { SocialProvider } from "../src/core/domain/types";
 
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +22,25 @@ const usePrismaRepo = process.env.REPO === "prisma" || process.argv.includes("--
 const db: GlobalRepo = usePrismaRepo
   ? new PrismaRepo(createFakePrisma(fileURLToPath(new URL("../prisma/schema.prisma", import.meta.url))).client as never)
   : new MemoryRepo(undefined, () => new Date(clock.now));
-const deps: Deps = { db, hasher: createWebHasher(1000), now: () => new Date(clock.now) };
+// Gateway login sosial tiruan: "code" berisi profil yang ingin disimulasikan,
+// sehingga aturan penautan akun bisa diuji tanpa jaringan.
+const socialEnabled: SocialProvider[] = ["GOOGLE", "FACEBOOK", "TIKTOK"];
+const testGateway: SocialGateway = {
+  mode: "redirect",
+  enabled: () => [...socialEnabled],
+  async profileFromCode(provider, { code }): Promise<SocialProfile> {
+    const p = JSON.parse(code) as { id?: string; email?: string; emailVerified?: boolean; name?: string };
+    return {
+      providerUserId: p.id ?? `${provider.toLowerCase()}-${p.email ?? "anon"}`,
+      email: p.email ?? null,
+      emailVerified: p.emailVerified ?? Boolean(p.email),
+      name: p.name ?? null,
+      avatarUrl: null,
+    };
+  },
+};
+const social = (p: { id?: string; email?: string; emailVerified?: boolean; name?: string }) => JSON.stringify(p);
+const deps: Deps = { db, hasher: createWebHasher(1000), now: () => new Date(clock.now), social: testGateway };
 
 let passed = 0;
 async function test(name: string, fn: () => Promise<void>) {
@@ -454,6 +474,129 @@ async function main() {
     assert.equal((await finance.call("GET", `/invoices/${target.id}`)).body.amountPaid, before, "tagihan tidak berubah");
     // setelah ditolak, pelanggan boleh mengirim ulang
     assert.equal((await portal.call("POST", `/portal/invoices/${target.id}/confirm-payment`, { amount: 100_000, paidAt: ymd(realNow) })).status, 201);
+  });
+
+  console.log("\nLogin dengan akun sosial");
+  const oauth = (provider: string) => `/auth/oauth/${provider}/callback`;
+  await test("daftar penyedia yang aktif", async () => {
+    const r = await client().call("GET", "/auth/providers");
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(
+      r.body.providers.map((p: { id: string }) => p.id).sort(),
+      ["FACEBOOK", "GOOGLE", "TIKTOK"],
+    );
+    assert.equal(r.body.providers.find((p: { id: string }) => p.id === "TIKTOK").canSignUp, false, "TikTok tidak bisa dipakai mendaftar");
+  });
+  await test("Google dengan email terverifikasi → langsung disatukan dengan akun lama", async () => {
+    const c = client(null, "ip-g1");
+    const r = await c.call("POST", oauth("google"), { code: social({ id: "g-budi", email: "budi@kopikita.id", name: "Budi Santoso" }) });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.redirectTo, "/portal");
+    assert.equal(r.body.isNew, false, "bukan akun baru — ditautkan ke akun lama");
+    assert.equal(c.session?.role, "CUSTOMER");
+    const me = await c.call("GET", "/auth/me");
+    assert.equal(me.body.user.email, "budi@kopikita.id");
+    const acc = await c.call("GET", "/auth/social-accounts");
+    assert.equal(acc.body.accounts.length, 1);
+    assert.equal(acc.body.accounts[0].provider, "GOOGLE");
+    assert.equal(acc.body.passwordSet, true, "akun lama tetap punya kata sandi");
+  });
+  await test("masuk kedua kali memakai tautan yang sama (tidak menggandakan akun)", async () => {
+    const c = client(null, "ip-g2");
+    const r = await c.call("POST", oauth("google"), { code: social({ id: "g-budi", email: "budi@kopikita.id" }) });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const acc = await c.call("GET", "/auth/social-accounts");
+    assert.equal(acc.body.accounts.length, 1, "tetap satu tautan");
+    // kata sandi lama masih bisa dipakai
+    assert.equal((await client().call("POST", "/auth/login", { email: "budi@kopikita.id", password: DEMO_PASSWORD })).status, 200);
+  });
+  await test("akun tim internal ditolak (harus email + kata sandi)", async () => {
+    const r = await client(null, "ip-g3").call("POST", oauth("google"), { code: social({ id: "g-owner", email: "owner@bintaroworks.id", name: "Arief" }) });
+    assert.equal(r.status, 403, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /tim internal/i);
+  });
+  await test("email belum terverifikasi tidak disatukan otomatis", async () => {
+    const r = await client(null, "ip-g4").call("POST", oauth("google"), {
+      code: social({ id: "g-palsu", email: "budi@kopikita.id", emailVerified: false }),
+    });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /belum ditautkan/i);
+  });
+  await test("email asing tanpa halaman pemesanan → diminta mendaftar dulu", async () => {
+    const r = await client(null, "ip-g5").call("POST", oauth("google"), { code: social({ id: "g-baru", email: "orang.baru@gmail.com" }) });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /belum terdaftar/i);
+  });
+  await test("daftar lewat Google dari aplikasi pelanggan → akun pelanggan baru", async () => {
+    const c = client(null, "ip-g6");
+    const r = await c.call("POST", oauth("google"), {
+      code: social({ id: "g-sinta", email: "sinta@gmail.com", name: "Sinta Dewi" }),
+      orgSlug: SLUG,
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.isNew, true);
+    const ov = await c.call("GET", "/portal/overview");
+    assert.equal(ov.status, 200, JSON.stringify(ov.body));
+    assert.equal(ov.body.customer.name, "Sinta Dewi");
+    const acc = await c.call("GET", "/auth/social-accounts");
+    assert.equal(acc.body.passwordSet, false, "akun sosial belum punya kata sandi");
+    // terlihat oleh tim
+    assert.ok(((await staff.call("GET", "/customers")).body as { name: string }[]).some((x) => x.name === "Sinta Dewi"));
+  });
+  await test("akun sosial tanpa kata sandi: tidak bisa lepas tautan terakhir, bisa setelah menyetel sandi", async () => {
+    const c = client(null, "ip-g7");
+    await c.call("POST", oauth("google"), { code: social({ id: "g-sinta", email: "sinta@gmail.com" }) });
+    const acc = (await c.call("GET", "/auth/social-accounts")).body;
+    const only = acc.accounts[0];
+    const gagal = await c.call("DELETE", `/auth/social-accounts/${only.id}`);
+    assert.equal(gagal.status, 409, JSON.stringify(gagal.body));
+    assert.match(gagal.body.error.message, /kata sandi/i);
+    assert.equal((await c.call("POST", "/auth/password/set", { newPassword: "sinta12345" })).status, 200);
+    assert.equal((await c.call("POST", "/auth/password/set", { newPassword: "lagi12345" })).status, 409, "hanya sekali");
+    assert.equal((await c.call("DELETE", `/auth/social-accounts/${only.id}`)).status, 200);
+    // sekarang bisa masuk dengan kata sandi
+    assert.equal((await client().call("POST", "/auth/login", { email: "sinta@gmail.com", password: "sinta12345" })).status, 200);
+  });
+  await test("TikTok: tanpa tautan ditolak, setelah ditautkan bisa masuk", async () => {
+    const tiktok = social({ id: "tt-budi", name: "budi.kopi" });
+    const belum = await client(null, "ip-t1").call("POST", oauth("tiktok"), { code: tiktok });
+    assert.equal(belum.status, 409, JSON.stringify(belum.body));
+    assert.match(belum.body.error.message, /belum ditautkan/i);
+    // tautkan dari portal (pengguna sudah masuk)
+    const link = await portal.call("POST", "/auth/social-accounts/tiktok", { code: tiktok });
+    assert.equal(link.status, 201, JSON.stringify(link.body));
+    assert.equal(link.body.provider, "TIKTOK");
+    assert.equal((await portal.call("POST", "/auth/social-accounts/tiktok", { code: social({ id: "tt-lain" }) })).status, 409, "satu penyedia satu tautan");
+    // sekarang TikTok bisa dipakai masuk
+    const c = client(null, "ip-t2");
+    const masuk = await c.call("POST", oauth("tiktok"), { code: tiktok });
+    assert.equal(masuk.status, 200, JSON.stringify(masuk.body));
+    assert.equal(masuk.body.redirectTo, "/portal");
+  });
+  await test("akun sosial milik orang lain tidak bisa direbut", async () => {
+    const c = client(null, "ip-g8");
+    await c.call("POST", oauth("google"), { code: social({ id: "g-rina", email: "rina@gmail.com", name: "Rina" }), orgSlug: SLUG });
+    const r = await c.call("POST", "/auth/social-accounts/google", { code: social({ id: "g-budi", email: "budi@kopikita.id" }) });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /pengguna lain/i);
+  });
+  await test("penyedia yang tidak diaktifkan ditolak", async () => {
+    const idx = socialEnabled.indexOf("FACEBOOK");
+    socialEnabled.splice(idx, 1);
+    try {
+      const r = await client(null, "ip-f1").call("POST", oauth("facebook"), { code: social({ id: "fb-1", email: "x@y.id" }) });
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+      assert.match(r.body.error.message, /belum diaktifkan/i);
+    } finally {
+      socialEnabled.splice(idx, 0, "FACEBOOK");
+    }
+  });
+  await test("penyedia tidak dikenal → 404, kode kosong → 422", async () => {
+    assert.equal((await client(null, "ip-x1").call("POST", oauth("twitter"), { code: social({ id: "a" }) })).status, 404);
+    assert.equal((await client(null, "ip-x2").call("POST", oauth("google"), { code: "" })).status, 422);
+  });
+  await test("tamu tidak bisa melihat daftar akun tertaut", async () => {
+    assert.equal((await client().call("GET", "/auth/social-accounts")).status, 401);
   });
 
   console.log("\nMulti-tenant");

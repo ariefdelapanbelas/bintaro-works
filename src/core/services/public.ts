@@ -11,6 +11,11 @@ import type { Deps } from "../repo/types";
 import type { SessionPayload } from "./auth";
 import { makeSvc } from "./context";
 
+/** Organisasi dengan halaman publik aktif (dipakai juga oleh login sosial). */
+export async function publicOrgBySlug(deps: Deps, slug: string): Promise<Organization> {
+  return publicOrg(deps, slug);
+}
+
 async function publicOrg(deps: Deps, slug: string): Promise<Organization> {
   const org = await deps.db.findOrganizationBySlug(slug);
   if (!org || !org.publicEnabled) throw notFound("Halaman");
@@ -115,7 +120,6 @@ export async function publicInquiry(deps: Deps, slug: string, body: unknown) {
 export async function publicRegister(deps: Deps, slug: string, body: unknown): Promise<{ session: SessionPayload; customerId: string }> {
   const org = await publicOrg(deps, slug);
   const input = parse(publicRegisterSchema, body);
-  const repo = deps.db.forOrg(org.id);
 
   // Email yang sudah punya akun tidak bisa dipakai mendaftar lagi (mencegah
   // orang lain menautkan email milik seseorang ke organisasi ini).
@@ -123,6 +127,28 @@ export async function publicRegister(deps: Deps, slug: string, body: unknown): P
     throw new AppError("CONFLICT", "Email ini sudah terdaftar. Silakan masuk memakai kata sandi Anda.", { email: "sudah terdaftar" });
   }
 
+  const created = await createCustomerAccount(deps, org, {
+    name: input.name,
+    company: input.company ?? null,
+    email: input.email,
+    phone: input.phone,
+    passwordHash: await deps.hasher.hash(input.password),
+    passwordSet: true,
+    note: "Mendaftar sendiri lewat aplikasi pelanggan.",
+  });
+  return { session: { uid: created.userId, oid: org.id, role: "CUSTOMER" }, customerId: created.customerId };
+}
+
+/**
+ * Buat pelanggan + user portal + keanggotaan sekaligus.
+ * Dipakai oleh pendaftaran mandiri (email/kata sandi) maupun login sosial.
+ */
+export async function createCustomerAccount(
+  deps: Deps,
+  org: Organization,
+  input: { name: string; company: string | null; email: string; phone: string | null; passwordHash: string; passwordSet: boolean; note: string },
+): Promise<{ userId: string; customerId: string }> {
+  const repo = deps.db.forOrg(org.id);
   const customer = await repo.customer.create({
     type: input.company ? "COMPANY" : "INDIVIDUAL",
     name: input.company || input.name,
@@ -133,9 +159,15 @@ export async function publicRegister(deps: Deps, slug: string, body: unknown): P
     address: null,
     industry: null,
     status: "ACTIVE",
-    notes: "Mendaftar sendiri lewat aplikasi pelanggan.",
+    notes: input.note,
   });
-  const user = await deps.db.createUser({ email: input.email, name: input.name, passwordHash: await deps.hasher.hash(input.password), phone: input.phone });
+  const user = await deps.db.createUser({
+    email: input.email,
+    name: input.name,
+    passwordHash: input.passwordHash,
+    phone: input.phone,
+    passwordSet: input.passwordSet,
+  });
   await repo.membership.create({ userId: user.id, role: "CUSTOMER", customerId: customer.id });
   await repo.auditLog.create({
     userId: null,
@@ -145,5 +177,5 @@ export async function publicRegister(deps: Deps, slug: string, body: unknown): P
     entityId: customer.id,
     summary: `Pendaftaran mandiri: ${customer.name}`,
   });
-  return { session: { uid: user.id, oid: org.id, role: "CUSTOMER" }, customerId: customer.id };
+  return { userId: user.id, customerId: customer.id };
 }

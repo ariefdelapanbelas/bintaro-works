@@ -84,6 +84,15 @@ export const signupSchema = z.object({
   password,
 });
 export const changePasswordSchema = z.object({ currentPassword: z.string().min(1), newPassword: password });
+/** Setel kata sandi pertama kali (akun yang lahir dari login sosial). */
+export const setPasswordSchema = z.object({ newPassword: password });
+/** Callback login sosial (alur SPA/demo). */
+export const oauthCallbackSchema = z.object({
+  code: z.string().min(1, "kode otorisasi kosong"),
+  redirectUri: z.string().max(400).optional(),
+  codeVerifier: z.string().max(200).optional(),
+  orgSlug: z.string().max(60).optional(),
+});
 
 // ---- CRM ----
 export const leadSchema = z.object({
